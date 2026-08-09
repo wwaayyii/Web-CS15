@@ -296,6 +296,22 @@ export class WeaponView {
 
 
         // ====================================================
+        // Muzzle Smoke V1
+        // ====================================================
+
+        this.muzzleSmokeParticles =
+            [];
+
+
+        this.muzzleSmokeMaterial =
+            null;
+
+
+        this.muzzleSmokeGeometry =
+            null;
+
+
+        // ====================================================
         // State
         // ====================================================
 
@@ -325,6 +341,23 @@ export class WeaponView {
 
         this.recoilRotation =
             new THREE.Vector3();
+
+
+        // ====================================================
+        // Weapon Feedback V2
+        //
+        // Visual-only recoil impulse.
+        // Does NOT affect camera, raycast, damage or spread.
+        // ====================================================
+
+        this.visualKickVelocity =
+            0;
+
+        this.visualLiftVelocity =
+            0;
+
+        this.visualRollVelocity =
+            0;
 
 
         this.reloadTime =
@@ -445,6 +478,8 @@ export class WeaponView {
 
 
         this.createMuzzleFlash();
+
+        this.createMuzzleSmokeResources();
 
         this.bindEvents();
 
@@ -2271,22 +2306,34 @@ export class WeaponView {
 
 
     // ========================================================
-    // Muzzle Flash
+    // Muzzle Flash V2
     // ========================================================
 
     createMuzzleFlash() {
 
-        const geometry =
+        const group =
+            new THREE.Group();
+
+
+        group.name =
+            "MUZZLE_FLASH_V2";
+
+
+        // ----------------------------------------------------
+        // Outer flash
+        // ----------------------------------------------------
+
+        const outerGeometry =
             new THREE.PlaneGeometry(
-                0.23,
-                0.23
+                0.30,
+                0.30
             );
 
 
-        const material =
+        const outerMaterial =
             new THREE.MeshBasicMaterial({
                 color:
-                    0xffe36b,
+                    0xffa62b,
 
                 transparent:
                     true,
@@ -2297,6 +2344,9 @@ export class WeaponView {
                 depthWrite:
                     false,
 
+                depthTest:
+                    false,
+
                 side:
                     THREE.DoubleSide,
 
@@ -2305,16 +2355,88 @@ export class WeaponView {
             });
 
 
-        this.muzzleFlash =
+        const outer =
             new THREE.Mesh(
-                geometry,
-                material
+                outerGeometry,
+                outerMaterial
             );
 
 
-        this.muzzleFlash.rotation.z =
-            Math.random() *
-            Math.PI;
+        outer.name =
+            "MUZZLE_FLASH_OUTER";
+
+
+        group.add(
+            outer
+        );
+
+
+        // ----------------------------------------------------
+        // Bright core
+        // ----------------------------------------------------
+
+        const coreGeometry =
+            new THREE.PlaneGeometry(
+                0.16,
+                0.16
+            );
+
+
+        const coreMaterial =
+            new THREE.MeshBasicMaterial({
+                color:
+                    0xfff3a0,
+
+                transparent:
+                    true,
+
+                opacity:
+                    0,
+
+                depthWrite:
+                    false,
+
+                depthTest:
+                    false,
+
+                side:
+                    THREE.DoubleSide,
+
+                blending:
+                    THREE.AdditiveBlending
+            });
+
+
+        const core =
+            new THREE.Mesh(
+                coreGeometry,
+                coreMaterial
+            );
+
+
+        core.position.z =
+            -0.012;
+
+
+        core.name =
+            "MUZZLE_FLASH_CORE";
+
+
+        group.add(
+            core
+        );
+
+
+        this.muzzleFlash =
+            group;
+
+
+        this.muzzleFlash.userData.outer =
+            outer;
+
+
+        this.muzzleFlash.userData.core =
+            core;
 
 
         this.muzzleAnchor.add(
@@ -2322,17 +2444,195 @@ export class WeaponView {
         );
 
 
+        // ----------------------------------------------------
+        // Point light
+        // ----------------------------------------------------
+
         this.muzzleLight =
             new THREE.PointLight(
                 0xffb13b,
                 0,
-                3.5
+                4.6
             );
+
+
+        this.muzzleLight.decay =
+            2;
 
 
         this.muzzleAnchor.add(
             this.muzzleLight
         );
+    }
+
+
+    // ========================================================
+    // Muzzle Smoke Resources V1
+    // ========================================================
+
+    createMuzzleSmokeResources() {
+
+        this.muzzleSmokeGeometry =
+            new THREE.PlaneGeometry(
+                0.18,
+                0.18
+            );
+
+
+        this.muzzleSmokeMaterial =
+            new THREE.MeshBasicMaterial({
+                color:
+                    0x8b8b8b,
+
+                transparent:
+                    true,
+
+                opacity:
+                    0.18,
+
+                depthWrite:
+                    false,
+
+                side:
+                    THREE.DoubleSide
+            });
+    }
+
+
+    getMuzzleProfile(
+        weaponId =
+            this.currentWeaponId
+    ) {
+
+        switch (
+            weaponId
+        ) {
+
+            case "usp":
+
+                return {
+                    flashScale:
+                        0.58,
+
+                    light:
+                        0.75,
+
+                    smokeChance:
+                        0.18
+                };
+
+
+            case "mp5":
+
+                return {
+                    flashScale:
+                        0.72,
+
+                    light:
+                        1.35,
+
+                    smokeChance:
+                        0.34
+                };
+
+
+            case "glock":
+
+                return {
+                    flashScale:
+                        0.82,
+
+                    light:
+                        1.65,
+
+                    smokeChance:
+                        0.28
+                };
+
+
+            case "m4a1":
+
+                return {
+                    flashScale:
+                        0.92,
+
+                    light:
+                        2.10,
+
+                    smokeChance:
+                        0.42
+                };
+
+
+            case "ak47":
+
+                return {
+                    flashScale:
+                        1.12,
+
+                    light:
+                        2.85,
+
+                    smokeChance:
+                        0.60
+                };
+
+
+            case "deagle":
+
+                return {
+                    flashScale:
+                        1.22,
+
+                    light:
+                        3.10,
+
+                    smokeChance:
+                        0.48
+                };
+
+
+            case "awp":
+
+                return {
+                    flashScale:
+                        1.42,
+
+                    light:
+                        3.65,
+
+                    smokeChance:
+                        0.72
+                };
+
+
+            case "scout":
+
+                return {
+                    flashScale:
+                        1.10,
+
+                    light:
+                        2.55,
+
+                    smokeChance:
+                        0.52
+                };
+
+
+            default:
+
+                return {
+                    flashScale:
+                        0.88,
+
+                    light:
+                        1.90,
+
+                    smokeChance:
+                        0.35
+                };
+        }
     }
 
 
@@ -2345,32 +2645,463 @@ export class WeaponView {
         }
 
 
+        const profile =
+            this.getMuzzleProfile();
+
+
         this.muzzleFlashTime =
-            0.055;
+            0.050;
 
 
-        this.muzzleFlash.material.opacity =
-            1;
+        const outer =
+            this.muzzleFlash
+                .userData
+                .outer;
 
 
-        this.muzzleFlash.rotation.z =
-            Math.random() *
-            Math.PI;
+        const core =
+            this.muzzleFlash
+                .userData
+                .core;
+
+
+        if (
+            outer
+        ) {
+
+            outer.material.opacity =
+                1;
+
+
+            outer.rotation.z =
+                Math.random() *
+                Math.PI;
+
+
+            const outerScale =
+                profile.flashScale *
+                (
+                    0.82 +
+                    Math.random() *
+                    0.42
+                );
+
+
+            outer.scale.set(
+                outerScale,
+                outerScale *
+                    (
+                        0.88 +
+                        Math.random() *
+                        0.22
+                    ),
+                1
+            );
+        }
+
+
+        if (
+            core
+        ) {
+
+            core.material.opacity =
+                1;
+
+
+            core.rotation.z =
+                Math.random() *
+                Math.PI;
+
+
+            const coreScale =
+                profile.flashScale *
+                (
+                    0.72 +
+                    Math.random() *
+                    0.20
+                );
+
+
+            core.scale.setScalar(
+                coreScale
+            );
+        }
+
+
+        if (
+            this.muzzleLight
+        ) {
+
+            this.muzzleLight.intensity =
+                profile.light;
+
+
+            this.muzzleLight.distance =
+                3.4 +
+                profile.flashScale *
+                1.2;
+        }
+
+
+        if (
+            Math.random() <
+            profile.smokeChance
+        ) {
+
+            this.spawnMuzzleSmoke(
+                profile
+            );
+        }
+    }
+
+
+    // ========================================================
+    // Muzzle Smoke V1
+    // ========================================================
+
+    spawnMuzzleSmoke(
+        profile
+    ) {
+
+        if (
+            !this.muzzleSmokeGeometry ||
+            !this.muzzleSmokeMaterial ||
+            !this.muzzleAnchor
+        ) {
+
+            return;
+        }
+
+
+        /*
+         * 为每个粒子 clone material，
+         * 这样 opacity 可以独立变化。
+         */
+        const material =
+            this.muzzleSmokeMaterial
+                .clone();
+
+
+        const particle =
+            new THREE.Mesh(
+                this.muzzleSmokeGeometry,
+                material
+            );
+
+
+        particle.position.set(
+            (
+                Math.random() -
+                0.5
+            ) *
+                0.035,
+
+            0.015 +
+                Math.random() *
+                0.025,
+
+            -0.025
+        );
 
 
         const scale =
-            0.7 +
-            Math.random() *
-            0.7;
+            profile.flashScale *
+            (
+                0.55 +
+                Math.random() *
+                0.35
+            );
 
 
-        this.muzzleFlash.scale.setScalar(
+        particle.scale.setScalar(
             scale
         );
 
 
-        this.muzzleLight.intensity =
-            2.5;
+        particle.rotation.z =
+            Math.random() *
+            Math.PI;
+
+
+        this.muzzleAnchor.add(
+            particle
+        );
+
+
+        this.muzzleSmokeParticles.push({
+            mesh:
+                particle,
+
+            life:
+                0.42 +
+                Math.random() *
+                0.18,
+
+            age:
+                0,
+
+            rise:
+                0.11 +
+                Math.random() *
+                0.08,
+
+            drift:
+                (
+                    Math.random() -
+                    0.5
+                ) *
+                0.06,
+
+            spin:
+                (
+                    Math.random() -
+                    0.5
+                ) *
+                1.4
+        });
+
+
+        /*
+         * 防止极端连射积累太多粒子。
+         */
+        while (
+            this.muzzleSmokeParticles.length >
+            14
+        ) {
+
+            const oldest =
+                this.muzzleSmokeParticles
+                    .shift();
+
+
+            oldest?.mesh
+                ?.parent
+                ?.remove(
+                    oldest.mesh
+                );
+
+
+            oldest?.mesh
+                ?.material
+                ?.dispose?.();
+        }
+    }
+
+
+    updateMuzzleSmoke(
+        delta
+    ) {
+
+        for (
+            let index =
+                this.muzzleSmokeParticles
+                    .length -
+                    1;
+
+            index >=
+                0;
+
+            index--
+        ) {
+
+            const particle =
+                this.muzzleSmokeParticles[
+                    index
+                ];
+
+
+            particle.age +=
+                delta;
+
+
+            const t =
+                clamp01(
+                    particle.age /
+                    particle.life
+                );
+
+
+            particle.mesh.position.y +=
+                particle.rise *
+                delta;
+
+
+            particle.mesh.position.x +=
+                particle.drift *
+                delta;
+
+
+            particle.mesh.position.z -=
+                0.035 *
+                delta;
+
+
+            particle.mesh.rotation.z +=
+                particle.spin *
+                delta;
+
+
+            const grow =
+                1 +
+                delta *
+                1.25;
+
+
+            particle.mesh.scale
+                .multiplyScalar(
+                    grow
+                );
+
+
+            particle.mesh.material.opacity =
+                (
+                    1 -
+                    t
+                ) *
+                0.16;
+
+
+            if (
+                t >=
+                1
+            ) {
+
+                particle.mesh
+                    .parent
+                    ?.remove(
+                        particle.mesh
+                    );
+
+
+                particle.mesh
+                    .material
+                    ?.dispose?.();
+
+
+                this.muzzleSmokeParticles
+                    .splice(
+                        index,
+                        1
+                    );
+            }
+        }
+    }
+
+
+    // ========================================================
+    // Flash update
+    // ========================================================
+
+    updateMuzzleFlash(
+        delta
+    ) {
+
+        if (
+            this.muzzleFlashTime <=
+            0
+        ) {
+
+            const outer =
+                this.muzzleFlash
+                    ?.userData
+                    ?.outer;
+
+
+            const core =
+                this.muzzleFlash
+                    ?.userData
+                    ?.core;
+
+
+            if (
+                outer
+            ) {
+
+                outer.material.opacity =
+                    0;
+            }
+
+
+            if (
+                core
+            ) {
+
+                core.material.opacity =
+                    0;
+            }
+
+
+            if (
+                this.muzzleLight
+            ) {
+
+                this.muzzleLight.intensity =
+                    0;
+            }
+
+
+            return;
+        }
+
+
+        this.muzzleFlashTime -=
+            delta;
+
+
+        const t =
+            clamp01(
+                this.muzzleFlashTime /
+                0.050
+            );
+
+
+        const outer =
+            this.muzzleFlash
+                ?.userData
+                ?.outer;
+
+
+        const core =
+            this.muzzleFlash
+                ?.userData
+                ?.core;
+
+
+        if (
+            outer
+        ) {
+
+            outer.material.opacity =
+                t *
+                0.92;
+        }
+
+
+        if (
+            core
+        ) {
+
+            core.material.opacity =
+                Math.min(
+                    1,
+                    t *
+                    1.25
+                );
+        }
+
+
+        if (
+            this.muzzleLight
+        ) {
+
+            this.muzzleLight.intensity *=
+                Math.max(
+                    0,
+                    1 -
+                    delta *
+                    24
+                );
+        }
     }
 
 
@@ -2520,6 +3251,49 @@ export class WeaponView {
             ) *
             rotation *
             0.5;
+
+
+        /*
+         * Weapon Feedback V2:
+         * add a short, sharp viewmodel impulse.
+         *
+         * fireKick/recoilRotation above provide the existing
+         * sustained recoil. These velocities add the immediate
+         * "snap" that makes each shot easier to feel.
+         */
+        this.visualKickVelocity =
+            Math.min(
+                0.22,
+                this.visualKickVelocity +
+                    kick *
+                    1.35
+            );
+
+
+        this.visualLiftVelocity =
+            Math.min(
+                0.16,
+                this.visualLiftVelocity +
+                    rotation *
+                    1.10
+            );
+
+
+        this.visualRollVelocity +=
+            (
+                Math.random() -
+                0.5
+            ) *
+            rotation *
+            0.55;
+
+
+        this.visualRollVelocity =
+            THREE.MathUtils.clamp(
+                this.visualRollVelocity,
+                -0.08,
+                0.08
+            );
 
 
         this.triggerMuzzleFlash();
@@ -2953,17 +3727,29 @@ export class WeaponView {
 
     // ========================================================
     // Recoil recovery
+    //
+    // Weapon Feedback V2
+    // - immediate backward snap
+    // - slight upward lift
+    // - tiny random roll
+    // - smooth return
+    //
+    // Visual only: camera / raycast / damage remain untouched.
     // ========================================================
 
     updateRecoil(
         delta
     ) {
 
+        // ----------------------------------------------------
+        // Existing sustained recoil
+        // ----------------------------------------------------
+
         this.fireKick =
             damp(
                 this.fireKick,
                 0,
-                14,
+                13,
                 delta
             );
 
@@ -2972,7 +3758,7 @@ export class WeaponView {
             damp(
                 this.fireSideKick,
                 0,
-                12,
+                11,
                 delta
             );
 
@@ -2981,7 +3767,7 @@ export class WeaponView {
             damp(
                 this.recoilRotation.x,
                 0,
-                15,
+                14,
                 delta
             );
 
@@ -2990,25 +3776,66 @@ export class WeaponView {
             damp(
                 this.recoilRotation.z,
                 0,
-                12,
+                11,
                 delta
             );
 
 
+        // ----------------------------------------------------
+        // Fast visual impulse recovery
+        // ----------------------------------------------------
+
+        this.visualKickVelocity =
+            damp(
+                this.visualKickVelocity,
+                0,
+                22,
+                delta
+            );
+
+
+        this.visualLiftVelocity =
+            damp(
+                this.visualLiftVelocity,
+                0,
+                20,
+                delta
+            );
+
+
+        this.visualRollVelocity =
+            damp(
+                this.visualRollVelocity,
+                0,
+                18,
+                delta
+            );
+
+
+        // ----------------------------------------------------
+        // Apply to first-person weapon model only
+        // ----------------------------------------------------
+
         this.weaponRoot.position.z +=
-            this.fireKick;
+            this.fireKick +
+            this.visualKickVelocity;
 
 
         this.weaponRoot.position.x +=
             this.fireSideKick;
 
 
+        /*
+         * Negative X rotation lifts the muzzle visually.
+         */
         this.weaponRoot.rotation.x -=
-            this.recoilRotation.x;
+            this.recoilRotation.x +
+            this.visualLiftVelocity;
 
 
         this.weaponRoot.rotation.z +=
-            this.recoilRotation.z;
+            this.recoilRotation.z +
+            this.visualRollVelocity;
     }
 
 
@@ -3168,6 +3995,11 @@ export class WeaponView {
         this.updateMuzzleFlash(
             delta
         );
+
+
+        this.updateMuzzleSmoke(
+            delta
+        );
     }
 
 
@@ -3275,6 +4107,44 @@ export class WeaponView {
 
 
         this.modelCache.clear();
+
+
+        for (
+            const particle
+            of this.muzzleSmokeParticles
+        ) {
+
+            particle.mesh
+                ?.parent
+                ?.remove(
+                    particle.mesh
+                );
+
+
+            particle.mesh
+                ?.material
+                ?.dispose?.();
+        }
+
+
+        this.muzzleSmokeParticles.length =
+            0;
+
+
+        this.muzzleSmokeGeometry
+            ?.dispose?.();
+
+
+        this.muzzleSmokeMaterial
+            ?.dispose?.();
+
+
+        this.muzzleSmokeGeometry =
+            null;
+
+
+        this.muzzleSmokeMaterial =
+            null;
 
 
         this.currentModel =
