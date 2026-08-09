@@ -1,0 +1,2005 @@
+/* ==========================================================
+   Web CS 1.5
+   style.css
+   ========================================================== */
+
+
+/* ==========================================================
+   RESET
+   ========================================================== */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+}
+
+body {
+    font-family:
+        "Courier New",
+        Consolas,
+        monospace;
+
+    color: #fff;
+
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+
+/* ==========================================================
+   ROOT
+   ========================================================== */
+
+#game-root {
+    position: relative;
+
+    width: 100vw;
+    height: 100vh;
+
+    overflow: hidden;
+
+    background: #000;
+}
+
+
+/* ==========================================================
+   THREE.JS CANVAS
+   ========================================================== */
+
+#game-canvas {
+    position: absolute;
+
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    height: 100%;
+
+    display: block;
+
+    z-index: 0;
+
+    outline: none;
+}
+
+
+/* ==========================================================
+   COMMON OVERLAY
+   ========================================================== */
+
+.screen-overlay {
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 1000;
+
+    display: flex;
+
+    justify-content: center;
+    align-items: center;
+
+    background:
+        radial-gradient(
+            circle at center,
+            rgba(25, 35, 25, 0.75),
+            rgba(0, 0, 0, 0.96)
+        );
+
+    backdrop-filter: blur(2px);
+}
+
+
+/* ==========================================================
+   START SCREEN
+   ========================================================== */
+
+.start-panel {
+    width: min(
+        620px,
+        calc(100vw - 40px)
+    );
+
+    padding: 36px 42px;
+
+    border:
+        2px solid
+        rgba(200, 190, 100, 0.75);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(19, 24, 19, 0.96),
+            rgba(8, 10, 8, 0.98)
+        );
+
+    box-shadow:
+        0 0 30px
+        rgba(0, 0, 0, 0.9),
+        inset 0 0 25px
+        rgba(130, 140, 70, 0.08);
+
+    text-align: center;
+}
+
+
+.game-logo {
+    color: #d6c75e;
+
+    font-size: 50px;
+    font-weight: bold;
+
+    letter-spacing: 5px;
+
+    text-shadow:
+        2px 2px 0 #000,
+        0 0 12px
+        rgba(230, 210, 80, 0.35);
+}
+
+
+.game-logo span {
+    color: #8ca84b;
+}
+
+
+.game-subtitle {
+    margin-top: 7px;
+
+    color: #9da58d;
+
+    font-size: 14px;
+
+    letter-spacing: 2px;
+}
+
+
+.main-button {
+    margin-top: 30px;
+
+    min-width: 220px;
+
+    padding: 13px 30px;
+
+    border:
+        1px solid
+        #d6c75e;
+
+    background:
+        linear-gradient(
+            180deg,
+            #3a4329,
+            #202718
+        );
+
+    color: #f3e888;
+
+    font-family: inherit;
+
+    font-size: 18px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+
+    cursor: pointer;
+
+    box-shadow:
+        inset 0 0 10px
+        rgba(255, 255, 150, 0.08),
+        0 0 8px
+        rgba(0, 0, 0, 0.8);
+}
+
+
+.main-button:hover {
+    background:
+        linear-gradient(
+            180deg,
+            #515d35,
+            #2e3720
+        );
+
+    color: #fff7ad;
+}
+
+
+.main-button:active {
+    transform: translateY(1px);
+}
+
+
+.pause-text {
+    min-height: 20px;
+
+    margin-top: 14px;
+
+    color: #b8bd9d;
+
+    font-size: 12px;
+
+    letter-spacing: 2px;
+}
+
+
+/* ==========================================================
+   CONTROLS HELP
+   ========================================================== */
+
+.controls-help {
+    margin-top: 24px;
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, 1fr);
+
+    gap: 8px 18px;
+
+    text-align: left;
+
+    color: #a8ae9d;
+
+    font-size: 12px;
+}
+
+
+.controls-help div {
+    padding: 5px 7px;
+
+    border-bottom:
+        1px solid
+        rgba(255, 255, 255, 0.04);
+}
+
+
+.controls-help strong {
+    display: inline-block;
+
+    min-width: 105px;
+
+    color: #d7cb73;
+}
+
+
+/* ==========================================================
+   CROSSHAIR
+   ========================================================== */
+
+.crosshair {
+    position: fixed;
+
+    top: 50%;
+    left: 50%;
+
+    width: 28px;
+    height: 28px;
+
+    transform:
+        translate(-50%, -50%);
+
+    z-index: 120;
+
+    pointer-events: none;
+}
+
+
+.crosshair-line {
+    position: absolute;
+
+    background: #79ff58;
+
+    box-shadow:
+        0 0 2px #000,
+        0 0 2px
+        rgba(120, 255, 90, 0.5);
+
+    opacity: 0.9;
+}
+
+
+.crosshair-top {
+    width: 2px;
+    height: 7px;
+
+    top: 0;
+    left: 13px;
+}
+
+
+.crosshair-bottom {
+    width: 2px;
+    height: 7px;
+
+    bottom: 0;
+    left: 13px;
+}
+
+
+.crosshair-left {
+    width: 7px;
+    height: 2px;
+
+    left: 0;
+    top: 13px;
+}
+
+
+.crosshair-right {
+    width: 7px;
+    height: 2px;
+
+    right: 0;
+    top: 13px;
+}
+
+
+/* ==========================================================
+   HITMARKER
+   ========================================================== */
+
+.hitmarker {
+    position: fixed;
+
+    top: 50%;
+    left: 50%;
+
+    width: 38px;
+    height: 38px;
+
+    transform:
+        translate(-50%, -50%);
+
+    z-index: 125;
+
+    pointer-events: none;
+
+    opacity: 0;
+
+    transition:
+        opacity 0.06s linear,
+        transform 0.06s linear;
+}
+
+
+.hit-line {
+    position: absolute;
+
+    width: 10px;
+    height: 2px;
+
+    background: #fff;
+
+    box-shadow:
+        0 0 4px #fff;
+}
+
+
+.hit-line-1 {
+    top: 8px;
+    left: 5px;
+
+    transform:
+        rotate(45deg);
+}
+
+
+.hit-line-2 {
+    top: 8px;
+    right: 5px;
+
+    transform:
+        rotate(-45deg);
+}
+
+
+.hit-line-3 {
+    bottom: 8px;
+    left: 5px;
+
+    transform:
+        rotate(-45deg);
+}
+
+
+.hit-line-4 {
+    bottom: 8px;
+    right: 5px;
+
+    transform:
+        rotate(45deg);
+}
+
+
+/* ==========================================================
+   DAMAGE INDICATOR
+   ========================================================== */
+
+.damage-indicator {
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 80;
+
+    pointer-events: none;
+
+    opacity: 0;
+
+    background:
+        radial-gradient(
+            circle at center,
+            rgba(255, 0, 0, 0) 30%,
+            rgba(255, 0, 0, 0.22) 70%,
+            rgba(170, 0, 0, 0.48)
+        );
+
+    transition:
+        opacity 0.08s ease-out;
+}
+
+
+/* ==========================================================
+   TOP HUD
+   ========================================================== */
+
+.top-hud {
+    position: fixed;
+
+    top: 14px;
+    left: 50%;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 110;
+
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 14px;
+
+    pointer-events: none;
+}
+
+
+.team-score,
+.round-center {
+    min-height: 46px;
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.18);
+
+    background:
+        rgba(0, 0, 0, 0.58);
+
+    box-shadow:
+        0 2px 10px
+        rgba(0, 0, 0, 0.5);
+}
+
+
+.team-score {
+    min-width: 105px;
+
+    padding: 12px 14px;
+
+    text-align: center;
+
+    font-size: 17px;
+    font-weight: bold;
+}
+
+
+.team-score-ct {
+    color: #65aaff;
+
+    border-color:
+        rgba(70, 140, 255, 0.42);
+}
+
+
+.team-score-t {
+    color: #ff6a59;
+
+    border-color:
+        rgba(255, 75, 55, 0.42);
+}
+
+
+.round-center {
+    min-width: 105px;
+
+    padding: 5px 14px;
+
+    text-align: center;
+}
+
+
+.round-number {
+    color: #b9baa5;
+
+    font-size: 10px;
+
+    letter-spacing: 1px;
+}
+
+
+.round-timer {
+    margin-top: 2px;
+
+    color: #f0df69;
+
+    font-size: 21px;
+    font-weight: bold;
+}
+
+
+.round-timer[data-state="warning"] {
+    color: #ffad37;
+}
+
+
+.round-timer[data-state="danger"] {
+    color: #ff4747;
+
+    animation:
+        timer-pulse
+        0.65s infinite;
+}
+
+
+@keyframes timer-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.55;
+    }
+}
+
+
+/* ==========================================================
+   FPS
+   ========================================================== */
+
+.fps-counter {
+    position: fixed;
+
+    top: 9px;
+    left: 10px;
+
+    z-index: 100;
+
+    color: #7aff5a;
+
+    font-size: 11px;
+
+    text-shadow:
+        1px 1px 2px #000;
+
+    pointer-events: none;
+}
+
+
+/* ==========================================================
+   BOTTOM HUD
+   ========================================================== */
+
+.bottom-left-hud {
+    position: fixed;
+
+    left: 24px;
+    bottom: 23px;
+
+    z-index: 110;
+
+    display: flex;
+
+    align-items: flex-end;
+
+    gap: 16px;
+
+    pointer-events: none;
+}
+
+
+.hud-stat {
+    display: flex;
+
+    align-items: center;
+
+    gap: 7px;
+}
+
+
+.hud-icon {
+    color: #d4c866;
+
+    font-size: 21px;
+
+    text-shadow:
+        1px 1px 3px #000;
+}
+
+
+.hud-value {
+    min-width: 40px;
+
+    color: #72dfff;
+
+    font-size: 29px;
+    font-weight: bold;
+
+    line-height: 1;
+
+    text-shadow:
+        2px 2px 2px #000;
+}
+
+
+.hud-value[data-state="warning"] {
+    color: #ffba42;
+}
+
+
+.hud-value[data-state="critical"] {
+    color: #ff4141;
+
+    animation:
+        health-pulse
+        0.6s infinite;
+}
+
+
+@keyframes health-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.55;
+    }
+}
+
+
+.hud-money {
+    margin-left: 5px;
+
+    color: #64ff64;
+
+    font-size: 21px;
+    font-weight: bold;
+
+    text-shadow:
+        2px 2px 2px #000;
+}
+
+
+/* ==========================================================
+   WEAPON HUD
+   ========================================================== */
+
+.bottom-right-hud {
+    position: fixed;
+
+    right: 25px;
+    bottom: 22px;
+
+    z-index: 110;
+
+    min-width: 190px;
+
+    text-align: right;
+
+    pointer-events: none;
+}
+
+
+.hud-weapon-name {
+    margin-bottom: 3px;
+
+    color: #bec6ad;
+
+    font-size: 13px;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+
+    text-shadow:
+        1px 1px 2px #000;
+}
+
+
+.ammo-row {
+    display: flex;
+
+    justify-content: flex-end;
+    align-items: baseline;
+
+    gap: 7px;
+
+    text-shadow:
+        2px 2px 3px #000;
+}
+
+
+.ammo-clip {
+    color: #78dfef;
+
+    font-size: 32px;
+    font-weight: bold;
+}
+
+
+.ammo-divider {
+    color: #7d897b;
+
+    font-size: 20px;
+}
+
+
+.ammo-reserve {
+    color: #b6c1ad;
+
+    font-size: 20px;
+}
+
+
+/* ==========================================================
+   STATUS
+   ========================================================== */
+
+.hud-status {
+    position: fixed;
+
+    left: 50%;
+    bottom: 125px;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 150;
+
+    min-width: 260px;
+
+    color: #f1e47b;
+
+    font-size: 17px;
+    font-weight: bold;
+
+    text-align: center;
+
+    text-shadow:
+        2px 2px 3px #000;
+
+    pointer-events: none;
+}
+
+
+/* ==========================================================
+   FREEZE HUD
+   ========================================================== */
+
+.freeze-hud {
+    position: fixed;
+
+    top: 96px;
+    left: 50%;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 115;
+
+    padding: 10px 18px;
+
+    border:
+        1px solid
+        rgba(225, 215, 110, 0.55);
+
+    background:
+        rgba(0, 0, 0, 0.58);
+
+    pointer-events: none;
+}
+
+
+.freeze-text {
+    color: #f2df65;
+
+    font-size: 16px;
+    font-weight: bold;
+
+    letter-spacing: 1px;
+
+    text-shadow:
+        1px 1px 3px #000;
+}
+
+
+/* ==========================================================
+   SPECTATOR
+   ========================================================== */
+
+.spectate-hud {
+    position: fixed;
+
+    left: 50%;
+    bottom: 85px;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 150;
+
+    display: none;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    padding: 10px 20px;
+
+    background:
+        rgba(0, 0, 0, 0.55);
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.15);
+
+    pointer-events: none;
+}
+
+
+.spectate-title {
+    color: #ffcc55;
+
+    font-size: 17px;
+    font-weight: bold;
+}
+
+
+.spectate-subtitle {
+    margin-top: 4px;
+
+    color: #c8c8c8;
+
+    font-size: 11px;
+}
+
+
+/* ==========================================================
+   KILL FEED
+   ========================================================== */
+
+.kill-feed {
+    position: fixed;
+
+    top: 68px;
+    right: 18px;
+
+    z-index: 140;
+
+    width: 420px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: flex-end;
+
+    gap: 5px;
+
+    pointer-events: none;
+}
+
+
+.kill-feed-entry {
+    max-width: 100%;
+
+    padding: 5px 8px;
+
+    background:
+        rgba(0, 0, 0, 0.52);
+
+    border-left:
+        2px solid
+        rgba(220, 210, 100, 0.45);
+
+    color: #ddd;
+
+    font-size: 12px;
+
+    white-space: nowrap;
+
+    box-shadow:
+        0 1px 5px
+        rgba(0, 0, 0, 0.55);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+.kill-feed-weapon {
+    margin: 0 7px;
+
+    color: #dad27b;
+
+    font-weight: bold;
+}
+
+
+.kill-feed-headshot {
+    margin-right: 7px;
+
+    color: #ff4040;
+
+    text-shadow:
+        0 0 4px
+        rgba(255, 50, 50, 0.8);
+}
+
+
+/* ==========================================================
+   RADIO MESSAGE
+   ========================================================== */
+
+.radio-message {
+    position: fixed;
+
+    left: 20px;
+    bottom: 112px;
+
+    z-index: 160;
+
+    display: none;
+
+    max-width: 530px;
+
+    padding: 6px 9px;
+
+    color: #e1e5d1;
+
+    font-size: 13px;
+
+    line-height: 1.35;
+
+    background:
+        rgba(0, 0, 0, 0.34);
+
+    text-shadow:
+        1px 1px 2px #000;
+
+    pointer-events: none;
+}
+
+
+/* ==========================================================
+   RADIO HISTORY
+   ========================================================== */
+
+.radio-history {
+    position: fixed;
+
+    left: 20px;
+    top: 120px;
+
+    z-index: 105;
+
+    width: min(
+        500px,
+        50vw
+    );
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 2px;
+
+    pointer-events: none;
+}
+
+
+.radio-history-item {
+    color: #d8dbc8;
+
+    font-size: 11px;
+
+    line-height: 1.3;
+
+    text-shadow:
+        1px 1px 2px #000;
+}
+
+
+/* ==========================================================
+   RADIO MENU
+   ========================================================== */
+
+.radio-menu {
+    position: fixed;
+
+    left: 24px;
+    top: 180px;
+
+    z-index: 350;
+
+    display: none;
+
+    width: 310px;
+
+    padding: 10px;
+
+    border:
+        1px solid
+        rgba(215, 205, 105, 0.55);
+
+    background:
+        rgba(10, 12, 8, 0.91);
+
+    box-shadow:
+        0 4px 18px
+        rgba(0, 0, 0, 0.7);
+
+    color: #dbd8a5;
+}
+
+
+.radio-menu-title {
+    padding: 5px 8px 9px;
+
+    color: #f0dd63;
+
+    font-size: 14px;
+    font-weight: bold;
+
+    border-bottom:
+        1px solid
+        rgba(215, 205, 105, 0.25);
+
+    letter-spacing: 1px;
+}
+
+
+.radio-menu-list {
+    margin-top: 5px;
+}
+
+
+.radio-menu-item,
+.radio-menu-close {
+    padding: 6px 8px;
+
+    color: #c8ccb7;
+
+    font-size: 12px;
+
+    cursor: pointer;
+}
+
+
+.radio-menu-item:hover,
+.radio-menu-close:hover {
+    background:
+        rgba(110, 120, 60, 0.22);
+
+    color: #fff58b;
+}
+
+
+.radio-number {
+    display: inline-block;
+
+    min-width: 25px;
+
+    color: #f0df62;
+}
+
+
+.radio-menu-close {
+    margin-top: 4px;
+
+    border-top:
+        1px solid
+        rgba(255, 255, 255, 0.08);
+}
+
+
+/* ==========================================================
+   COMMON GAME MENU
+   ========================================================== */
+
+.game-menu {
+    position: fixed;
+
+    top: 50%;
+    left: 50%;
+
+    transform:
+        translate(-50%, -50%);
+
+    z-index: 500;
+
+    display: none;
+
+    width: min(
+        720px,
+        calc(100vw - 40px)
+    );
+
+    max-height: 82vh;
+
+    overflow: auto;
+
+    border:
+        2px solid
+        rgba(194, 187, 91, 0.72);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(21, 25, 18, 0.985),
+            rgba(8, 10, 7, 0.985)
+        );
+
+    box-shadow:
+        0 10px 40px
+        rgba(0, 0, 0, 0.92);
+
+    color: #cbd0bc;
+}
+
+
+.game-menu-header {
+    position: sticky;
+
+    top: 0;
+
+    z-index: 3;
+
+    display: flex;
+
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 12px 15px;
+
+    background:
+        #1e2517;
+
+    color: #e8dc68;
+
+    border-bottom:
+        1px solid
+        rgba(220, 210, 100, 0.38);
+
+    font-size: 17px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+}
+
+
+.menu-close-button {
+    width: 31px;
+    height: 27px;
+
+    border:
+        1px solid
+        #898555;
+
+    background:
+        #282d1c;
+
+    color: #e4df9f;
+
+    font-family: inherit;
+
+    font-size: 20px;
+
+    line-height: 20px;
+
+    cursor: pointer;
+}
+
+
+.menu-close-button:hover {
+    color: #fff;
+
+    background:
+        #4a4f30;
+}
+
+
+/* ==========================================================
+   BUY MENU
+   ========================================================== */
+
+.buy-menu-list {
+    padding: 14px;
+}
+
+
+.buy-section {
+    margin-bottom: 20px;
+}
+
+
+.buy-section-title {
+    margin-bottom: 7px;
+
+    padding-bottom: 5px;
+
+    border-bottom:
+        1px solid
+        rgba(255, 255, 255, 0.10);
+
+    color: #d6cd6e;
+
+    font-size: 13px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+}
+
+
+.buy-item {
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+        1fr 80px 90px;
+
+    align-items: center;
+
+    margin-bottom: 3px;
+
+    padding: 9px 11px;
+
+    border:
+        1px solid transparent;
+
+    background:
+        rgba(255, 255, 255, 0.035);
+
+    color: #c9cfbd;
+
+    font-family: inherit;
+
+    font-size: 12px;
+
+    text-align: left;
+
+    cursor: pointer;
+}
+
+
+.buy-item:hover {
+    border-color:
+        rgba(214, 205, 105, 0.35);
+
+    background:
+        rgba(100, 115, 55, 0.18);
+
+    color: #fff5a5;
+}
+
+
+.buy-item-name {
+    font-weight: bold;
+}
+
+
+.buy-item-team {
+    color: #899381;
+
+    text-align: center;
+}
+
+
+.buy-item-price {
+    color: #6dff6d;
+
+    text-align: right;
+
+    font-weight: bold;
+}
+
+
+.buy-menu-status {
+    min-height: 28px;
+
+    padding-top: 8px;
+
+    color: #ffd74d;
+
+    font-size: 12px;
+
+    text-align: center;
+}
+
+
+/* ==========================================================
+   BOT MENU
+   ========================================================== */
+
+.bot-menu {
+    width: min(
+        460px,
+        calc(100vw - 40px)
+    );
+}
+
+
+.bot-menu-list {
+    padding: 15px;
+}
+
+
+.bot-menu-item {
+    width: 100%;
+
+    margin-bottom: 6px;
+
+    padding: 12px;
+
+    border:
+        1px solid
+        rgba(200, 190, 100, 0.20);
+
+    background:
+        rgba(255, 255, 255, 0.035);
+
+    color: #ccd2bf;
+
+    font-family: inherit;
+
+    font-size: 13px;
+
+    text-align: left;
+
+    cursor: pointer;
+}
+
+
+.bot-menu-item:hover {
+    background:
+        rgba(105, 120, 60, 0.22);
+
+    color: #fff19a;
+
+    border-color:
+        rgba(210, 200, 95, 0.52);
+}
+
+
+/* ==========================================================
+   SCOREBOARD
+   ========================================================== */
+
+.scoreboard-overlay {
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 700;
+
+    display: none;
+
+    padding-top: 65px;
+
+    background:
+        rgba(0, 0, 0, 0.36);
+
+    pointer-events: none;
+}
+
+
+.scoreboard {
+    width: min(
+        840px,
+        calc(100vw - 45px)
+    );
+
+    max-height: 80vh;
+
+    margin: 0 auto;
+
+    overflow: hidden;
+
+    border:
+        2px solid
+        rgba(185, 180, 120, 0.58);
+
+    background:
+        rgba(12, 14, 11, 0.91);
+
+    box-shadow:
+        0 5px 30px
+        rgba(0, 0, 0, 0.75);
+}
+
+
+.scoreboard-title {
+    padding: 12px;
+
+    color: #e4da70;
+
+    font-size: 18px;
+    font-weight: bold;
+
+    text-align: center;
+
+    letter-spacing: 3px;
+
+    border-bottom:
+        1px solid
+        rgba(200, 195, 105, 0.25);
+}
+
+
+.scoreboard-team {
+    padding: 9px 12px 13px;
+}
+
+
+.scoreboard-team-title {
+    margin-bottom: 4px;
+
+    padding: 5px 8px;
+
+    font-size: 13px;
+    font-weight: bold;
+}
+
+
+.ct-title {
+    color: #6caaff;
+
+    background:
+        rgba(50, 100, 170, 0.14);
+}
+
+
+.t-title {
+    color: #ff6d58;
+
+    background:
+        rgba(180, 60, 40, 0.14);
+}
+
+
+.scoreboard table {
+    width: 100%;
+
+    border-collapse: collapse;
+
+    table-layout: fixed;
+
+    font-size: 12px;
+}
+
+
+.scoreboard th {
+    padding: 6px 8px;
+
+    color: #8f9988;
+
+    font-weight: normal;
+
+    text-align: left;
+
+    border-bottom:
+        1px solid
+        rgba(255, 255, 255, 0.08);
+}
+
+
+.scoreboard td {
+    padding: 7px 8px;
+
+    color: #d0d4c8;
+
+    border-bottom:
+        1px solid
+        rgba(255, 255, 255, 0.035);
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+}
+
+
+.scoreboard tbody tr.is-me {
+    background:
+        rgba(225, 215, 95, 0.09);
+}
+
+
+.scoreboard tbody tr.is-me td:first-child {
+    color: #fff19a;
+}
+
+
+.status-alive {
+    color: #68ff68;
+}
+
+
+.status-dead {
+    color: #ff5959;
+}
+
+
+/* ==========================================================
+   ERROR
+   ========================================================== */
+
+.game-error {
+    position: fixed;
+
+    left: 50%;
+    top: 20px;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 2000;
+
+    display: none;
+
+    width: min(
+        800px,
+        calc(100vw - 30px)
+    );
+
+    padding: 13px 16px;
+
+    border:
+        1px solid #ff5555;
+
+    background:
+        rgba(70, 0, 0, 0.94);
+
+    color: #fff;
+
+    font-size: 13px;
+
+    text-align: center;
+
+    white-space: pre-wrap;
+}
+
+
+/* ==========================================================
+   VERSION
+   ========================================================== */
+
+.game-version {
+    position: fixed;
+
+    right: 8px;
+    bottom: 6px;
+
+    z-index: 50;
+
+    color:
+        rgba(220, 220, 200, 0.35);
+
+    font-size: 9px;
+
+    pointer-events: none;
+}
+
+
+/* ==========================================================
+   SCROLLBAR
+   ========================================================== */
+
+.game-menu::-webkit-scrollbar {
+    width: 8px;
+}
+
+
+.game-menu::-webkit-scrollbar-track {
+    background: #111;
+}
+
+
+.game-menu::-webkit-scrollbar-thumb {
+    background: #4b5132;
+}
+
+
+.game-menu::-webkit-scrollbar-thumb:hover {
+    background: #6c7447;
+}
+
+
+/* ==========================================================
+   RESPONSIVE
+   ========================================================== */
+
+@media (
+    max-width: 700px
+) {
+
+    .start-panel {
+        padding:
+            25px 18px;
+    }
+
+
+    .game-logo {
+        font-size: 38px;
+    }
+
+
+    .controls-help {
+        grid-template-columns:
+            1fr;
+
+        max-height: 300px;
+
+        overflow-y: auto;
+    }
+
+
+    .controls-help strong {
+        min-width: 90px;
+    }
+
+
+    .top-hud {
+        top: 8px;
+
+        gap: 5px;
+    }
+
+
+    .team-score {
+        min-width: 75px;
+
+        padding:
+            10px 6px;
+
+        font-size: 13px;
+    }
+
+
+    .round-center {
+        min-width: 82px;
+    }
+
+
+    .round-timer {
+        font-size: 17px;
+    }
+
+
+    .bottom-left-hud {
+        left: 10px;
+        bottom: 12px;
+
+        gap: 8px;
+    }
+
+
+    .hud-value {
+        font-size: 22px;
+    }
+
+
+    .hud-money {
+        font-size: 16px;
+    }
+
+
+    .bottom-right-hud {
+        right: 10px;
+        bottom: 12px;
+
+        min-width: 130px;
+    }
+
+
+    .ammo-clip {
+        font-size: 25px;
+    }
+
+
+    .ammo-reserve {
+        font-size: 16px;
+    }
+
+
+    .kill-feed {
+        right: 8px;
+
+        width: 90vw;
+    }
+
+
+    .kill-feed-entry {
+        font-size: 10px;
+    }
+
+
+    .radio-menu {
+        left: 8px;
+
+        width: calc(
+            100vw - 16px
+        );
+    }
+
+
+    .radio-history {
+        left: 8px;
+
+        width: calc(
+            100vw - 16px
+        );
+    }
+
+
+    .scoreboard-overlay {
+        padding-top: 30px;
+    }
+
+
+    .scoreboard {
+        width:
+            calc(
+                100vw - 16px
+            );
+    }
+
+
+    .scoreboard {
+        overflow-x: auto;
+    }
+
+
+    .scoreboard table {
+        min-width: 600px;
+    }
+}
+
+
+/* ==========================================================
+   VERY SMALL SCREENS
+   ========================================================== */
+
+@media (
+    max-height: 600px
+) {
+
+    .controls-help {
+        max-height: 210px;
+
+        overflow-y: auto;
+    }
+
+
+    .start-panel {
+        padding-top: 18px;
+        padding-bottom: 18px;
+    }
+
+
+    .game-logo {
+        font-size: 34px;
+    }
+
+
+    .main-button {
+        margin-top: 15px;
+    }
+
+
+    .game-menu {
+        max-height: 92vh;
+    }
+}
+
+/* ==========================================================
+   MAIN MENU V2 / TEAM BUY MENU
+   ========================================================== */
+
+.buy-team-banner {
+    margin-bottom: 14px;
+    padding: 9px 12px;
+
+    border: 1px solid rgba(255, 255, 255, 0.18);
+
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    text-align: center;
+}
+
+.buy-team-ct {
+    color: #72c8ff;
+    border-color: rgba(62, 198, 255, 0.52);
+    background: rgba(17, 83, 125, 0.34);
+}
+
+.buy-team-t {
+    color: #ff8b7f;
+    border-color: rgba(255, 102, 88, 0.52);
+    background: rgba(122, 42, 33, 0.34);
+}
+
+@media (max-height: 850px) {
+    .start-panel {
+        max-height: 94vh;
+        overflow-y: auto;
+
+        padding-top: 20px;
+        padding-bottom: 20px;
+    }
+
+    .controls-help {
+        margin-top: 14px;
+    }
+
+    .main-button {
+        margin-top: 18px;
+    }
+}
+
+
+/* ==========================================================
+   MAIN MENU V2 - DEFINITIVE TWO COLUMN LAYOUT
+   ========================================================== */
+
+#start-overlay {
+    padding: 20px;
+}
+
+#start-overlay .start-panel {
+    width: min(1180px, calc(100vw - 50px));
+    max-height: 92vh;
+    overflow: hidden;
+    padding: 28px 30px;
+}
+
+#start-overlay .start-menu-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr) !important;
+    gap: 28px;
+    align-items: start;
+}
+
+#start-overlay .start-menu-left {
+    min-width: 0;
+}
+
+#start-overlay .how-to-play-panel {
+    min-width: 0;
+    max-height: calc(92vh - 56px);
+    overflow-y: auto;
+
+    padding: 18px;
+
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(5, 10, 13, 0.58);
+
+    text-align: left;
+}
+
+#start-overlay .how-to-play-title {
+    padding-bottom: 10px;
+
+    border-bottom: 1px solid rgba(215,205,105,0.24);
+
+    color: #e8dc68;
+
+    font-size: 18px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+
+    text-align: center;
+}
+
+#start-overlay .how-to-play-subtitle {
+    margin: 12px 0 6px;
+
+    color: #9da58d;
+
+    font-size: 10px;
+    font-weight: bold;
+
+    letter-spacing: 1.6px;
+}
+
+#start-overlay .how-to-play-panel .controls-help {
+    margin-top: 0;
+
+    display: grid;
+    grid-template-columns: 1fr;
+
+    gap: 1px;
+
+    font-size: 12px;
+}
+
+#start-overlay .how-to-play-panel .controls-help > div {
+    display: grid;
+
+    grid-template-columns: 120px 1fr;
+
+    gap: 10px;
+
+    align-items: center;
+
+    padding: 7px 8px;
+}
+
+#start-overlay .how-to-play-panel .controls-help strong {
+    min-width: 0;
+}
+
+#start-overlay .start-menu-left .map-select-panel {
+    margin-top: 18px;
+}
+
+#start-overlay .start-menu-left .setup-panel {
+    margin-top: 10px;
+}
+
+#start-overlay .start-menu-left .main-button {
+    margin-top: 18px;
+}
+
+#start-overlay .start-menu-left .pause-text {
+    margin-top: 9px;
+}
+
+
+/* Narrow screens fallback */
+@media (max-width: 900px) {
+
+    #start-overlay .start-panel {
+        width: min(760px, calc(100vw - 30px));
+        max-height: 94vh;
+        overflow-y: auto;
+    }
+
+    #start-overlay .start-menu-layout {
+        grid-template-columns: 1fr !important;
+    }
+
+    #start-overlay .how-to-play-panel {
+        max-height: none;
+    }
+
+    #start-overlay .how-to-play-panel .controls-help {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

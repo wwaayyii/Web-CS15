@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, user-scalable=no"
+    >
+
+    <title>Web CS 1.5</title>
+
+    <link
+        rel="stylesheet"
+        href="./style.css"
+    >
+
+    <!-- =====================================================
+         Three.js Import Map
+
+         所有 JS 中：
+
+         import * as THREE from "three";
+
+         import {
+             PointerLockControls
+         } from
+         "three/addons/controls/PointerLockControls.js";
+
+         都会通过这里解析。
+    ====================================================== -->
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three":
+                "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+
+            "three/addons/":
+                "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+    </script>
+
+    <style>
+        .map-select-panel {
+            margin-top: 18px;
+            margin-bottom: 12px;
+            padding: 12px 14px;
+            border: 1px solid rgba(255,255,255,.16);
+            background: rgba(5,12,18,.55);
+            border-radius: 4px;
+        }
+
+        .map-select-title {
+            margin-bottom: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.6px;
+            color: rgba(255,255,255,.72);
+        }
+
+        .map-select-row {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .map-select-button {
+            min-width: 118px;
+            padding: 8px 12px;
+            border: 1px solid rgba(255,255,255,.20);
+            border-radius: 3px;
+            background: rgba(15,23,31,.84);
+            color: #cbd5df;
+            font: 700 12px Arial, Helvetica, sans-serif;
+            letter-spacing: .6px;
+            cursor: pointer;
+        }
+
+        .map-select-button:hover {
+            border-color: rgba(105,190,255,.75);
+            color: #fff;
+        }
+
+        .map-select-button-active {
+            border-color: #3ec6ff;
+            background: rgba(17,83,125,.88);
+            color: #fff;
+            box-shadow: 0 0 10px rgba(62,198,255,.25);
+        }
+
+        .selected-map-text {
+            margin-top: 8px;
+            font-size: 10px;
+            color: rgba(255,255,255,.55);
+        }
+    
+        .setup-panel {
+            margin-top: 12px;
+            padding: 12px 14px;
+            border: 1px solid rgba(255,255,255,.12);
+            background: rgba(5,12,18,.48);
+            border-radius: 4px;
+        }
+
+        .setup-title {
+            margin-bottom: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.6px;
+            color: rgba(255,255,255,.72);
+        }
+
+        .setup-row {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .setup-choice {
+            min-width: 105px;
+            padding: 8px 12px;
+            border: 1px solid rgba(255,255,255,.20);
+            border-radius: 3px;
+            background: rgba(15,23,31,.84);
+            color: #cbd5df;
+            font: 700 12px Arial, Helvetica, sans-serif;
+            letter-spacing: .6px;
+            cursor: pointer;
+        }
+
+        .setup-choice-active {
+            color: #fff;
+            border-color: #e0cf62;
+            background: rgba(89,82,32,.82);
+        }
+
+        .team-choice-ct.setup-choice-active {
+            border-color: #3ec6ff;
+            background: rgba(17,83,125,.88);
+        }
+
+        .team-choice-t.setup-choice-active {
+            border-color: #ff6658;
+            background: rgba(122,42,33,.88);
+        }
+
+        .team-size-control {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .team-size-button {
+            width: 40px;
+            min-width: 40px;
+            font-size: 18px;
+        }
+
+        .team-size-value {
+            min-width: 92px;
+            color: #f1e47b;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .setup-summary {
+            margin-top: 10px;
+            color: rgba(255,255,255,.62);
+            font-size: 10px;
+            letter-spacing: .7px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <!-- =====================================================
+         GAME ROOT
+    ====================================================== -->
+
+    <div id="game-root">
+
+
+        <!-- =================================================
+             START / POINTER LOCK OVERLAY
+        ================================================== -->
+
+        <div
+            id="start-overlay"
+            class="screen-overlay"
+        >
+            <div class="start-panel">
+
+                <div class="start-menu-layout">
+
+                    <section class="start-menu-left">
+
+
+                <div class="game-logo">
+                    WEB CS
+                    <span>1.5</span>
+                </div>
+
+                <div class="game-subtitle">
+                    Counter-Strike Browser Remake
+                </div>
+
+
+                <!-- =========================================
+                     MAP SELECT
+                ========================================== -->
+
+                <div class="map-select-panel">
+
+                    <div class="map-select-title">
+                        SELECT MAP
+                    </div>
+
+                    <div class="map-select-row">
+
+                        <button
+                            class="map-select-button map-select-button-active"
+                            type="button"
+                            data-map-name="fy_iceworld_web"
+                            data-selected="true"
+                            aria-pressed="true"
+                        >
+                            ICEWORLD
+                        </button>
+
+                        <button
+                            class="map-select-button"
+                            type="button"
+                            data-map-name="aim_arena_web"
+                            data-selected="false"
+                            aria-pressed="false"
+                        >
+                            AIM ARENA
+                        </button>
+
+                    </div>
+
+                    <div class="selected-map-text">
+                        CURRENT:
+                        <span id="selected-map-label">
+                            ICEWORLD
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <div class="setup-panel">
+
+                    <div class="setup-title">
+                        SELECT TEAM
+                    </div>
+
+                    <div class="setup-row">
+
+                        <button
+                            class="setup-choice team-choice-ct setup-choice-active"
+                            type="button"
+                            data-team-choice="ct"
+                            aria-pressed="true"
+                        >
+                            COUNTER-TERRORIST
+                        </button>
+
+                        <button
+                            class="setup-choice team-choice-t"
+                            type="button"
+                            data-team-choice="t"
+                            aria-pressed="false"
+                        >
+                            TERRORIST
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <div class="setup-panel">
+
+                    <div class="setup-title">
+                        BOT DIFFICULTY
+                    </div>
+
+                    <div class="setup-row">
+
+                        <button
+                            class="setup-choice"
+                            type="button"
+                            data-difficulty-choice="easy"
+                        >
+                            EASY
+                        </button>
+
+                        <button
+                            class="setup-choice setup-choice-active"
+                            type="button"
+                            data-difficulty-choice="normal"
+                        >
+                            NORMAL
+                        </button>
+
+                        <button
+                            class="setup-choice"
+                            type="button"
+                            data-difficulty-choice="hard"
+                        >
+                            HARD
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <div class="setup-panel">
+
+                    <div class="setup-title">
+                        TEAM SIZE
+                    </div>
+
+                    <div class="team-size-control">
+
+                        <button
+                            class="setup-choice team-size-button"
+                            type="button"
+                            id="team-size-minus"
+                        >
+                            −
+                        </button>
+
+                        <div
+                            id="team-size-value"
+                            class="team-size-value"
+                        >
+                            5 VS 5
+                        </div>
+
+                        <button
+                            class="setup-choice team-size-button"
+                            type="button"
+                            id="team-size-plus"
+                        >
+                            +
+                        </button>
+
+                    </div>
+
+                    <div
+                        id="setup-summary"
+                        class="setup-summary"
+                    >
+                        CT · NORMAL · 5 VS 5
+                    </div>
+
+                </div>
+
+
+                <button
+                    id="start-button"
+                    class="main-button"
+                    type="button"
+                >
+                    CLICK TO PLAY
+                </button>
+
+                <div
+                    id="pause-text"
+                    class="pause-text"
+                >
+                    CLICK TO PLAY
+                </div>
+                    </section>
+
+
+                    <aside class="how-to-play-panel">
+
+                        <div class="how-to-play-title">
+                            HOW TO PLAY
+                        </div>
+
+                        <div class="how-to-play-subtitle">
+                            CONTROLS
+                        </div>
+
+<div class="controls-help">
+
+                    <div>
+                        <strong>WASD</strong>
+                        Move
+                    </div>
+
+                    <div>
+                        <strong>Mouse</strong>
+                        Aim
+                    </div>
+
+                    <div>
+                        <strong>Left Mouse</strong>
+                        Fire
+                    </div>
+
+                    <div>
+                        <strong>R</strong>
+                        Reload
+                    </div>
+
+                    <div>
+                        <strong>1 / 2 / 3</strong>
+                        Weapon
+                    </div>
+
+                    <div>
+                        <strong>Q</strong>
+                        Last Weapon
+                    </div>
+
+                    <div>
+                        <strong>G</strong>
+                        Grenade
+                    </div>
+
+                    <div>
+                        <strong>B</strong>
+                        Buy Menu
+                    </div>
+
+                    <div>
+                        <strong>Z / X / C</strong>
+                        Radio
+                    </div>
+
+                    <div>
+                        <strong>Ctrl</strong>
+                        Crouch
+                    </div>
+
+                    <div>
+                        <strong>Shift</strong>
+                        Sprint
+                    </div>
+
+                    <div>
+                        <strong>Space</strong>
+                        Jump
+                    </div>
+
+                    <div>
+                        <strong>Tab</strong>
+                        Scoreboard
+                    </div>
+
+                    <div>
+                        <strong>=</strong>
+                        Add BOT
+                    </div>
+
+                    <div>
+                        <strong>-</strong>
+                        Clear BOTs
+                    </div>
+
+                    <div>
+                        <strong>F3</strong>
+                        NAV Debug
+                    </div>
+
+                </div>
+
+                    </aside>
+
+                </div>
+
+</div>
+        </div>
+
+
+        <!-- =================================================
+             CROSSHAIR
+        ================================================== -->
+
+        <div
+            id="crosshair"
+            class="crosshair"
+        >
+            <div class="crosshair-line crosshair-top"></div>
+            <div class="crosshair-line crosshair-bottom"></div>
+            <div class="crosshair-line crosshair-left"></div>
+            <div class="crosshair-line crosshair-right"></div>
+        </div>
+
+
+        <!-- =================================================
+             HITMARKER
+
+             effects.js 查找：
+             #hitmarker
+             .hit-line
+        ================================================== -->
+
+        <div
+            id="hitmarker"
+            class="hitmarker"
+        >
+            <span class="hit-line hit-line-1"></span>
+            <span class="hit-line hit-line-2"></span>
+            <span class="hit-line hit-line-3"></span>
+            <span class="hit-line hit-line-4"></span>
+        </div>
+
+
+        <!-- =================================================
+             DAMAGE OVERLAY
+        ================================================== -->
+
+        <div
+            id="damage-indicator"
+            class="damage-indicator"
+        ></div>
+
+
+        <!-- =================================================
+             TOP HUD
+        ================================================== -->
+
+        <div class="top-hud">
+
+
+            <!-- =============================================
+                 CT SCORE
+            ============================================== -->
+
+            <div
+                id="team-a-score"
+                class="team-score team-score-ct"
+            >
+                CT 0
+            </div>
+
+
+            <!-- =============================================
+                 ROUND / TIMER
+            ============================================== -->
+
+            <div class="round-center">
+
+                <div
+                    id="round-number"
+                    class="round-number"
+                >
+                    Round 0
+                </div>
+
+                <div
+                    id="round-timer"
+                    class="round-timer"
+                >
+                    03:00
+                </div>
+
+            </div>
+
+
+            <!-- =============================================
+                 T SCORE
+            ============================================== -->
+
+            <div
+                id="team-b-score"
+                class="team-score team-score-t"
+            >
+                T 0
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             FPS
+        ================================================== -->
+
+        <div
+            id="fps-counter"
+            class="fps-counter"
+        >
+            FPS --
+        </div>
+
+
+        <!-- =================================================
+             NAVIGATION DEBUG
+
+             默认关闭。
+             F3 或点击按钮切换。
+             只控制 Debug 可视化，不影响 A* 寻路。
+        ================================================== -->
+
+        <button
+            id="nav-debug-toggle"
+            type="button"
+            title="Toggle Waypoint / A* debug path (F3)"
+            style="
+                position: fixed;
+                top: 34px;
+                left: 14px;
+                z-index: 9500;
+                padding: 5px 9px;
+                border: 1px solid rgba(255,255,255,0.28);
+                border-radius: 3px;
+                background: rgba(10,14,18,0.68);
+                color: #d8dde3;
+                font-family: Consolas, monospace;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .6px;
+                cursor: pointer;
+                user-select: none;
+            "
+        >
+            NAV DEBUG: OFF
+        </button>
+
+
+        <!-- =================================================
+             PLAYER STATUS
+        ================================================== -->
+
+        <div class="bottom-left-hud">
+
+
+            <!-- HP -->
+
+            <div class="hud-stat">
+
+                <div class="hud-icon">
+                    +
+                </div>
+
+                <div
+                    id="hud-hp"
+                    class="hud-value"
+                >
+                    100
+                </div>
+
+            </div>
+
+
+            <!-- Armor -->
+
+            <div class="hud-stat">
+
+                <div class="hud-icon">
+                    ◇
+                </div>
+
+                <div
+                    id="hud-armor"
+                    class="hud-value"
+                >
+                    0
+                </div>
+
+            </div>
+
+
+            <!-- Money -->
+
+            <div
+                id="hud-money"
+                class="hud-money"
+            >
+                $ 800
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             WEAPON HUD
+        ================================================== -->
+
+        <div class="bottom-right-hud">
+
+            <div
+                id="hud-weapon-name"
+                class="hud-weapon-name"
+            >
+                Desert Eagle
+            </div>
+
+            <div class="ammo-row">
+
+                <span
+                    id="hud-ammo-clip"
+                    class="ammo-clip"
+                >
+                    7
+                </span>
+
+                <span class="ammo-divider">
+                    /
+                </span>
+
+                <span
+                    id="hud-ammo-reserve"
+                    class="ammo-reserve"
+                >
+                    35
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             STATUS TEXT
+        ================================================== -->
+
+        <div
+            id="hud-status"
+            class="hud-status"
+        ></div>
+
+
+        <!-- =================================================
+             FREEZE TIME
+        ================================================== -->
+
+        <div
+            id="freeze-hud"
+            class="freeze-hud"
+        >
+            <div
+                id="freeze-timer-text"
+                class="freeze-text"
+            >
+                FREEZE TIME: 3s
+            </div>
+        </div>
+
+
+        <!-- =================================================
+             SPECTATOR HUD
+        ================================================== -->
+
+        <div
+            id="spectate-hud"
+            class="spectate-hud"
+        >
+            <div class="spectate-title">
+                SPECTATOR MODE
+            </div>
+
+            <div class="spectate-subtitle">
+                You were eliminated
+            </div>
+        </div>
+
+
+        <!-- =================================================
+             KILL FEED
+        ================================================== -->
+
+        <div
+            id="kill-feed"
+            class="kill-feed"
+        ></div>
+
+
+        <!-- =================================================
+             RADIO MESSAGE
+        ================================================== -->
+
+        <div
+            id="radio-message"
+            class="radio-message"
+        ></div>
+
+
+        <!-- =================================================
+             RADIO HISTORY
+        ================================================== -->
+
+        <div
+            id="radio-history"
+            class="radio-history"
+        ></div>
+
+
+        <!-- =================================================
+             RADIO MENU
+        ================================================== -->
+
+        <div
+            id="radio-menu"
+            class="radio-menu"
+        ></div>
+
+
+        <!-- =================================================
+             BUY MENU
+        ================================================== -->
+
+        <div
+            id="buy-menu"
+            class="game-menu buy-menu"
+        >
+
+            <div class="game-menu-header">
+
+                <div id="buy-menu-title">
+                    BUY MENU
+                </div>
+
+                <button
+                    id="buy-menu-close"
+                    class="menu-close-button"
+                    type="button"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div
+                id="buy-menu-list"
+                class="buy-menu-list"
+            >
+                <!-- ui.js 动态生成 -->
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             ADD BOT MENU
+        ================================================== -->
+
+        <div
+            id="add-bot-menu"
+            class="game-menu bot-menu"
+        >
+
+            <div class="game-menu-header">
+
+                <div>
+                    BOT CONTROL
+                </div>
+
+                <button
+                    id="add-bot-close"
+                    class="menu-close-button"
+                    type="button"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <div
+                id="add-bot-list"
+                class="bot-menu-list"
+            >
+                <!-- ui.js 动态生成 -->
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             TAB SCOREBOARD
+        ================================================== -->
+
+        <div
+            id="tab-scoreboard"
+            class="scoreboard-overlay"
+        >
+
+            <div class="scoreboard">
+
+                <div class="scoreboard-title">
+                    Web CS 1.5
+                </div>
+
+
+                <!-- =========================================
+                     CT
+                ========================================== -->
+
+                <section class="scoreboard-team">
+
+                    <div class="scoreboard-team-title ct-title">
+                        Counter-Terrorists
+                    </div>
+
+                    <table>
+
+                        <thead>
+                            <tr>
+                                <th>
+                                    Player
+                                </th>
+
+                                <th>
+                                    Kills
+                                </th>
+
+                                <th>
+                                    Deaths
+                                </th>
+
+                                <th>
+                                    Money
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+                            </tr>
+                        </thead>
+
+                        <tbody
+                            id="sb-ct-tbody"
+                        >
+                        </tbody>
+
+                    </table>
+
+                </section>
+
+
+                <!-- =========================================
+                     T
+                ========================================== -->
+
+                <section class="scoreboard-team">
+
+                    <div class="scoreboard-team-title t-title">
+                        Terrorists
+                    </div>
+
+                    <table>
+
+                        <thead>
+                            <tr>
+                                <th>
+                                    Player
+                                </th>
+
+                                <th>
+                                    Kills
+                                </th>
+
+                                <th>
+                                    Deaths
+                                </th>
+
+                                <th>
+                                    Money
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+                            </tr>
+                        </thead>
+
+                        <tbody
+                            id="sb-t-tbody"
+                        >
+                        </tbody>
+
+                    </table>
+
+                </section>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             ERROR MESSAGE
+        ================================================== -->
+
+        <div
+            id="game-error"
+            class="game-error"
+        ></div>
+
+
+        <!-- =================================================
+             VERSION
+        ================================================== -->
+
+        <div class="game-version">
+            Web CS 1.5 Remake
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         MAIN MENU V2 - URL SETTINGS
+    ====================================================== -->
+
+    <script>
+    (() => {
+
+        const maps =
+            new Set([
+                "fy_iceworld_web",
+                "aim_arena_web"
+            ]);
+
+
+        const teams =
+            new Set([
+                "ct",
+                "t"
+            ]);
+
+
+        const difficulties =
+            new Set([
+                "easy",
+                "normal",
+                "hard"
+            ]);
+
+
+        const params =
+            new URLSearchParams(
+                window.location.search
+            );
+
+
+        let selectedMap =
+            params.get("map");
+
+
+        if (!maps.has(selectedMap)) {
+            selectedMap = "fy_iceworld_web";
+        }
+
+
+        let selectedTeam =
+            params.get("team");
+
+
+        if (!teams.has(selectedTeam)) {
+            selectedTeam = "ct";
+        }
+
+
+        let selectedDifficulty =
+            params.get("difficulty");
+
+
+        if (!difficulties.has(selectedDifficulty)) {
+            selectedDifficulty = "normal";
+        }
+
+
+        let selectedTeamSize =
+            Number(
+                params.get(
+                    "teamSize"
+                )
+            );
+
+
+        if (!Number.isFinite(selectedTeamSize)) {
+            selectedTeamSize = 5;
+        }
+
+
+        selectedTeamSize =
+            Math.max(
+                2,
+                Math.min(
+                    10,
+                    Math.round(
+                        selectedTeamSize
+                    )
+                )
+            );
+
+
+        const mapButtons =
+            [
+                ...document.querySelectorAll(
+                    "[data-map-name]"
+                )
+            ];
+
+
+        const teamButtons =
+            [
+                ...document.querySelectorAll(
+                    "[data-team-choice]"
+                )
+            ];
+
+
+        const difficultyButtons =
+            [
+                ...document.querySelectorAll(
+                    "[data-difficulty-choice]"
+                )
+            ];
+
+
+        const mapLabel =
+            document.getElementById(
+                "selected-map-label"
+            );
+
+
+        const teamSizeValue =
+            document.getElementById(
+                "team-size-value"
+            );
+
+
+        const summary =
+            document.getElementById(
+                "setup-summary"
+            );
+
+
+        const syncGlobal =
+            () => {
+
+                window.__WEB_CS_SELECTED_MAP__ =
+                    selectedMap;
+
+
+                window.__WEB_CS_MATCH_SETUP__ =
+                    {
+                        team:
+                            selectedTeam,
+
+                        difficulty:
+                            selectedDifficulty,
+
+                        teamSize:
+                            selectedTeamSize
+                    };
+            };
+
+
+        const persist =
+            () => {
+
+                const next =
+                    new URLSearchParams(
+                        window.location.search
+                    );
+
+
+                next.set("map", selectedMap);
+                next.set("team", selectedTeam);
+                next.set("difficulty", selectedDifficulty);
+                next.set("teamSize", String(selectedTeamSize));
+
+
+                window.history.replaceState(
+                    null,
+                    "",
+                    `${window.location.pathname}?${next.toString()}`
+                );
+
+
+                syncGlobal();
+            };
+
+
+        const updateUI =
+            () => {
+
+                mapButtons.forEach(
+                    button => {
+
+                        const active =
+                            button.dataset.mapName ===
+                            selectedMap;
+
+
+                        button.classList.toggle(
+                            "map-select-button-active",
+                            active
+                        );
+                    }
+                );
+
+
+                teamButtons.forEach(
+                    button => {
+
+                        const active =
+                            button.dataset.teamChoice ===
+                            selectedTeam;
+
+
+                        button.classList.toggle(
+                            "setup-choice-active",
+                            active
+                        );
+                    }
+                );
+
+
+                difficultyButtons.forEach(
+                    button => {
+
+                        const active =
+                            button.dataset.difficultyChoice ===
+                            selectedDifficulty;
+
+
+                        button.classList.toggle(
+                            "setup-choice-active",
+                            active
+                        );
+                    }
+                );
+
+
+                if (mapLabel) {
+
+                    mapLabel.textContent =
+                        selectedMap ===
+                            "aim_arena_web"
+                            ? "AIM ARENA"
+                            : "ICEWORLD";
+                }
+
+
+                if (teamSizeValue) {
+
+                    teamSizeValue.textContent =
+                        `${selectedTeamSize} VS ${selectedTeamSize}`;
+                }
+
+
+                if (summary) {
+
+                    summary.textContent =
+                        `${
+                            selectedTeam === "t"
+                                ? "T"
+                                : "CT"
+                        } · ${selectedDifficulty.toUpperCase()} · ${selectedTeamSize} VS ${selectedTeamSize}`;
+                }
+
+
+                syncGlobal();
+            };
+
+
+        mapButtons.forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    event => {
+
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+
+
+                        const mapName =
+                            button.dataset.mapName;
+
+
+                        if (
+                            !maps.has(mapName) ||
+                            mapName === selectedMap
+                        ) {
+                            return;
+                        }
+
+
+                        const next =
+                            new URLSearchParams(
+                                window.location.search
+                            );
+
+
+                        next.set("map", mapName);
+                        next.set("team", selectedTeam);
+                        next.set("difficulty", selectedDifficulty);
+                        next.set("teamSize", String(selectedTeamSize));
+
+
+                        window.location.search =
+                            next.toString();
+                    },
+                    true
+                );
+            }
+        );
+
+
+        teamButtons.forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    event => {
+
+                        event.preventDefault();
+                        event.stopPropagation();
+
+
+                        const team =
+                            button.dataset.teamChoice;
+
+
+                        if (!teams.has(team)) {
+                            return;
+                        }
+
+
+                        selectedTeam = team;
+
+                        persist();
+                        updateUI();
+                    }
+                );
+            }
+        );
+
+
+        difficultyButtons.forEach(
+            button => {
+
+                button.addEventListener(
+                    "click",
+                    event => {
+
+                        event.preventDefault();
+                        event.stopPropagation();
+
+
+                        const difficulty =
+                            button.dataset.difficultyChoice;
+
+
+                        if (!difficulties.has(difficulty)) {
+                            return;
+                        }
+
+
+                        selectedDifficulty = difficulty;
+
+                        persist();
+                        updateUI();
+                    }
+                );
+            }
+        );
+
+
+        document
+            .getElementById(
+                "team-size-minus"
+            )
+            ?.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    selectedTeamSize =
+                        Math.max(
+                            2,
+                            selectedTeamSize - 1
+                        );
+
+                    persist();
+                    updateUI();
+                }
+            );
+
+
+        document
+            .getElementById(
+                "team-size-plus"
+            )
+            ?.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    selectedTeamSize =
+                        Math.min(
+                            10,
+                            selectedTeamSize + 1
+                        );
+
+                    persist();
+                    updateUI();
+                }
+            );
+
+
+        persist();
+        updateUI();
+
+    })();
+    </script>
+
+
+    <!-- =====================================================
+         GAME ENTRY
+
+         game.js 会自动 bootstrap()
+    ====================================================== -->
+
+    <script
+        type="module"
+        src="./src/core/game.js"
+    ></script>
+
+</body>
+</html>
