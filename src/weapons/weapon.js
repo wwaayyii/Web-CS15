@@ -256,6 +256,22 @@ export class Weapon {
         this.currentRecoil =
             0;
 
+
+        /*
+         * Dynamic Crosshair / Continuous Fire Bloom
+         *
+         * currentRecoil 使用武器原始 vertical 数值，
+         * 其恢复速度较快，不适合直接作为连续射击准心扩张量。
+         *
+         * recoilBloom 是独立的“连续射击累计值”：
+         * - 每成功射击 +1
+         * - 停火后逐渐恢复
+         * - 同时参与真实 spread 与动态准心
+         */
+        this.recoilBloom =
+            0;
+
+
         this.shotsFired =
             0;
 
@@ -553,6 +569,30 @@ export class Weapon {
             );
 
 
+        /*
+         * 连续射击 Bloom 恢复。
+         *
+         * recovery 原本各枪大约 4~10。
+         * 这里取较温和速度，确保连射时能累计，
+         * 停火后约 0.5~1 秒明显收回。
+         */
+        const bloomRecovery =
+            Math.max(
+                2.5,
+                recovery *
+                0.55
+            );
+
+
+        this.recoilBloom =
+            Math.max(
+                0,
+                this.recoilBloom -
+                bloomRecovery *
+                delta
+            );
+
+
         if (
             this.triggerHeld &&
             this.config.automatic
@@ -715,6 +755,18 @@ export class Weapon {
             this.config.recoil
                 ?.vertical ??
             0;
+
+
+        /*
+         * 每一发真实射击都会累计 Bloom。
+         * 上限避免长时间扫射把准心撑得离谱。
+         */
+        this.recoilBloom =
+            Math.min(
+                8,
+                this.recoilBloom +
+                    1
+            );
 
 
         this._emitAmmoChanged();
@@ -905,26 +957,45 @@ export class Weapon {
         // ----------------------------------------------------
 
         /*
-         * 优先使用显式 recoil.spread。
-         * 如果旧配置没有该字段，则保持当前基础散布，
-         * 避免擅自改变已经测试通过的武器手感。
+         * Continuous Fire Bloom
+         *
+         * config.js 当前没有 recoil.spread，
+         * 因此使用 vertical recoil 推导一个温和的
+         * 连射散布增量。
+         *
+         * 例如 AK vertical=0.080：
+         * 每 1 bloom 大约增加 0.0048 spread。
          */
-        const recoilSpread =
+        const configuredRecoilSpread =
             Number(
                 this.config.recoil
-                    ?.spread ??
-                0
-            ) || 0;
+                    ?.spread
+            );
+
+
+        const recoilSpreadPerBloom =
+            Number.isFinite(
+                configuredRecoilSpread
+            )
+                ? configuredRecoilSpread
+                : (
+                    Number(
+                        this.config.recoil
+                            ?.vertical ??
+                        0
+                    ) *
+                    0.060
+                );
 
 
         spread +=
             Math.max(
                 0,
                 Number(
-                    this.currentRecoil
+                    this.recoilBloom
                 ) || 0
             ) *
-            recoilSpread;
+            recoilSpreadPerBloom;
 
 
         return Math.max(
@@ -1561,6 +1632,9 @@ export class Weapon {
 
             currentRecoil:
                 this.currentRecoil,
+
+            recoilBloom:
+                this.recoilBloom,
 
             currentSpread:
                 this.getCurrentSpread()
