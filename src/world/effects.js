@@ -49,6 +49,12 @@ export class EffectsSystem {
 
         this.activeEffects = [];
 
+
+        // Bullet Impact V1
+        this.bulletHoleEffects = [];
+        this.maxBulletHoles = 70;
+
+
         this.cameraShake = {
             amount: 0,
             duration: 0,
@@ -392,19 +398,22 @@ export class EffectsSystem {
 
 
     // ========================================================
-    // 弹孔
+    // Bullet Impact V1 - 弹孔
     // ========================================================
 
     createBulletHole(
         point,
         normal,
         {
-            size = 0.18,
+            size = randomRange(
+                0.10,
+                0.145
+            ),
             lifetime =
                 GRAPHICS_CONFIG.effects
                     .bulletHoleLifetime /
                 1000,
-            color = 0x111111
+            color = 0x161616
         } = {}
     ) {
 
@@ -416,22 +425,34 @@ export class EffectsSystem {
             return null;
         }
 
+
         const geometry =
-            new THREE.PlaneGeometry(
-                size,
-                size
+            new THREE.CircleGeometry(
+                size * 0.5,
+                10
             );
+
 
         const material =
             new THREE.MeshBasicMaterial({
                 color,
-                side: THREE.DoubleSide,
-                polygonOffset: true,
-                polygonOffsetFactor: -2,
-                transparent: true,
-                opacity: 0.85,
-                depthWrite: false
+                side:
+                    THREE.DoubleSide,
+                polygonOffset:
+                    true,
+                polygonOffsetFactor:
+                    -4,
+                transparent:
+                    true,
+                opacity:
+                    randomRange(
+                        0.68,
+                        0.90
+                    ),
+                depthWrite:
+                    false
             });
+
 
         const decal =
             new THREE.Mesh(
@@ -439,37 +460,62 @@ export class EffectsSystem {
                 material
             );
 
+
         decal.position
-            .copy(point)
+            .copy(
+                point
+            )
             .add(
                 normal
                     .clone()
                     .multiplyScalar(
-                        0.012
+                        0.014
                     )
             );
+
 
         decal.lookAt(
             point
                 .clone()
-                .add(normal)
+                .add(
+                    normal
+                )
         );
+
 
         decal.rotateZ(
             randomRange(
                 0,
-                Math.PI * 2
+                Math.PI *
+                    2
             )
         );
+
 
         this.scene.add(
             decal
         );
 
+
+        const baseOpacity =
+            material.opacity;
+
+
         const effect = {
-            object: decal,
-            duration: lifetime,
-            elapsed: 0,
+            object:
+                decal,
+
+            duration:
+                Math.max(
+                    1,
+                    lifetime
+                ),
+
+            elapsed:
+                0,
+
+            isBulletHole:
+                true,
 
             update: (
                 delta,
@@ -478,7 +524,8 @@ export class EffectsSystem {
 
                 const fadeStart =
                     state.duration *
-                    0.75;
+                    0.82;
+
 
                 if (
                     state.elapsed >
@@ -490,40 +537,128 @@ export class EffectsSystem {
                             (
                                 state.elapsed -
                                 fadeStart
-                            )
-                            /
-                            (
+                            ) /
+                            Math.max(
+                                0.001,
                                 state.duration -
-                                fadeStart
+                                    fadeStart
                             ),
                             0,
                             1
                         );
 
+
                     material.opacity =
-                        0.85 *
-                        (1 - t);
+                        baseOpacity *
+                        (
+                            1 -
+                            t
+                        );
+                }
+            },
+
+            destroy: () => {
+
+                if (
+                    decal.parent
+                ) {
+
+                    decal.parent.remove(
+                        decal
+                    );
+                }
+
+
+                geometry.dispose();
+                material.dispose();
+
+
+                const index =
+                    this.bulletHoleEffects
+                        .indexOf(
+                            effect
+                        );
+
+
+                if (
+                    index >=
+                    0
+                ) {
+
+                    this.bulletHoleEffects
+                        .splice(
+                            index,
+                            1
+                        );
                 }
             }
         };
 
+
         this.activeEffects.push(
             effect
         );
+
+
+        this.bulletHoleEffects.push(
+            effect
+        );
+
+
+        /*
+         * Web 性能保护：
+         * 只保留最近 maxBulletHoles 个弹孔。
+         */
+        while (
+            this.bulletHoleEffects.length >
+            this.maxBulletHoles
+        ) {
+
+            const oldest =
+                this.bulletHoleEffects[
+                    0
+                ];
+
+
+            const activeIndex =
+                this.activeEffects
+                    .indexOf(
+                        oldest
+                    );
+
+
+            if (
+                activeIndex >=
+                0
+            ) {
+
+                this.activeEffects.splice(
+                    activeIndex,
+                    1
+                );
+            }
+
+
+            this._destroyEffect(
+                oldest
+            );
+        }
+
 
         return decal;
     }
 
 
     // ========================================================
-    // 简易命中火花
+    // Bullet Impact V1 - 火花
     // ========================================================
 
     createImpactSpark(
         point,
+        normal = null,
         {
-            count = 5,
-            lifetime = 0.25
+            count = 4,
+            lifetime = 0.18
         } = {}
     ) {
 
@@ -534,25 +669,58 @@ export class EffectsSystem {
             return;
         }
 
+
+        const surfaceNormal =
+            normal
+                ? normal
+                    .clone()
+                    .normalize()
+                : new THREE.Vector3(
+                    0,
+                    1,
+                    0
+                );
+
+
         for (
-            let i = 0;
-            i < count;
+            let i =
+                0;
+
+            i <
+                count;
+
             i++
         ) {
 
             const geometry =
                 new THREE.SphereGeometry(
-                    0.025,
+                    randomRange(
+                        0.012,
+                        0.022
+                    ),
                     4,
                     4
                 );
 
+
             const material =
                 new THREE.MeshBasicMaterial({
-                    color: 0xffcc66,
-                    transparent: true,
-                    opacity: 1
+                    color:
+                        Math.random() >
+                            0.35
+                            ? 0xffd37a
+                            : 0xff9d3d,
+
+                    transparent:
+                        true,
+
+                    opacity:
+                        1,
+
+                    depthWrite:
+                        false
                 });
+
 
             const particle =
                 new THREE.Mesh(
@@ -560,34 +728,66 @@ export class EffectsSystem {
                     material
                 );
 
-            particle.position.copy(
-                point
-            );
+
+            particle.position
+                .copy(
+                    point
+                )
+                .addScaledVector(
+                    surfaceNormal,
+                    0.025
+                );
+
 
             this.scene.add(
                 particle
             );
 
+
             const velocity =
-                new THREE.Vector3(
-                    randomRange(
-                        -2,
-                        2
-                    ),
-                    randomRange(
-                        0.5,
-                        3
-                    ),
-                    randomRange(
-                        -2,
-                        2
-                    )
+                surfaceNormal
+                    .clone()
+                    .multiplyScalar(
+                        randomRange(
+                            1.0,
+                            2.5
+                        )
+                    );
+
+
+            velocity.x +=
+                randomRange(
+                    -1.2,
+                    1.2
                 );
 
+            velocity.y +=
+                randomRange(
+                    0.15,
+                    1.5
+                );
+
+            velocity.z +=
+                randomRange(
+                    -1.2,
+                    1.2
+                );
+
+
             const effect = {
-                object: particle,
-                duration: lifetime,
-                elapsed: 0,
+                object:
+                    particle,
+
+                duration:
+                    randomRange(
+                        lifetime *
+                            0.70,
+                        lifetime *
+                            1.25
+                    ),
+
+                elapsed:
+                    0,
 
                 update: (
                     delta,
@@ -598,26 +798,719 @@ export class EffectsSystem {
                         8 *
                         delta;
 
-                    particle.position.addScaledVector(
-                        velocity,
-                        delta
-                    );
+
+                    particle.position
+                        .addScaledVector(
+                            velocity,
+                            delta
+                        );
+
 
                     const t =
                         clamp(
                             state.elapsed /
-                            state.duration,
+                                state.duration,
                             0,
                             1
                         );
 
+
+                    particle.scale
+                        .setScalar(
+                            1 -
+                            t *
+                                0.55
+                        );
+
+
                     material.opacity =
-                        1 - t;
+                        1 -
+                        t;
                 }
             };
 
+
             this.activeEffects.push(
                 effect
+            );
+        }
+    }
+
+
+    // ========================================================
+    // Bullet Impact V1 - 灰尘
+    // ========================================================
+
+    createImpactDust(
+        point,
+        normal = null,
+        {
+            count = 3,
+            lifetime = 0.34
+        } = {}
+    ) {
+
+        if (
+            !this.initialized ||
+            !point
+        ) {
+            return;
+        }
+
+
+        const surfaceNormal =
+            normal
+                ? normal
+                    .clone()
+                    .normalize()
+                : new THREE.Vector3(
+                    0,
+                    1,
+                    0
+                );
+
+
+        for (
+            let i =
+                0;
+
+            i <
+                count;
+
+            i++
+        ) {
+
+            const geometry =
+                new THREE.PlaneGeometry(
+                    randomRange(
+                        0.06,
+                        0.11
+                    ),
+                    randomRange(
+                        0.06,
+                        0.11
+                    )
+                );
+
+
+            const material =
+                new THREE.MeshBasicMaterial({
+                    color:
+                        Math.random() >
+                            0.5
+                            ? 0x8c8478
+                            : 0xaaa092,
+
+                    transparent:
+                        true,
+
+                    opacity:
+                        randomRange(
+                            0.20,
+                            0.34
+                        ),
+
+                    depthWrite:
+                        false,
+
+                    side:
+                        THREE.DoubleSide
+                });
+
+
+            const dust =
+                new THREE.Mesh(
+                    geometry,
+                    material
+                );
+
+
+            dust.position
+                .copy(
+                    point
+                )
+                .addScaledVector(
+                    surfaceNormal,
+                    0.035
+                );
+
+
+            /*
+             * 灰尘面片大致朝向摄像机，
+             * 避免侧面完全看不到。
+             */
+            if (
+                this.camera
+            ) {
+
+                dust.quaternion.copy(
+                    this.camera.quaternion
+                );
+            }
+
+
+            dust.rotation.z =
+                randomRange(
+                    0,
+                    Math.PI *
+                        2
+                );
+
+
+            this.scene.add(
+                dust
+            );
+
+
+            const velocity =
+                surfaceNormal
+                    .clone()
+                    .multiplyScalar(
+                        randomRange(
+                            0.15,
+                            0.42
+                        )
+                    );
+
+
+            velocity.x +=
+                randomRange(
+                    -0.18,
+                    0.18
+                );
+
+            velocity.y +=
+                randomRange(
+                    0.10,
+                    0.32
+                );
+
+            velocity.z +=
+                randomRange(
+                    -0.18,
+                    0.18
+                );
+
+
+            const baseOpacity =
+                material.opacity;
+
+
+            this.activeEffects.push({
+                object:
+                    dust,
+
+                duration:
+                    randomRange(
+                        lifetime *
+                            0.80,
+                        lifetime *
+                            1.25
+                    ),
+
+                elapsed:
+                    0,
+
+                update: (
+                    delta,
+                    state
+                ) => {
+
+                    dust.position
+                        .addScaledVector(
+                            velocity,
+                            delta
+                        );
+
+
+                    dust.rotation.z +=
+                        delta *
+                        0.8;
+
+
+                    dust.scale
+                        .multiplyScalar(
+                            1 +
+                            delta *
+                                1.65
+                        );
+
+
+                    const t =
+                        clamp(
+                            state.elapsed /
+                                state.duration,
+                            0,
+                            1
+                        );
+
+
+                    material.opacity =
+                        baseOpacity *
+                        (
+                            1 -
+                            t
+                        );
+                }
+            });
+        }
+    }
+
+
+    // ========================================================
+    // Surface Impact V2 - 木屑
+    // ========================================================
+
+    createWoodChips(
+        point,
+        normal = null,
+        {
+            count = 5,
+            lifetime = 0.34
+        } = {}
+    ) {
+
+        if (
+            !this.initialized ||
+            !point
+        ) {
+            return;
+        }
+
+
+        const surfaceNormal =
+            normal
+                ? normal
+                    .clone()
+                    .normalize()
+                : new THREE.Vector3(
+                    0,
+                    1,
+                    0
+                );
+
+
+        for (
+            let i =
+                0;
+
+            i <
+                count;
+
+            i++
+        ) {
+
+            const geometry =
+                new THREE.BoxGeometry(
+                    randomRange(
+                        0.018,
+                        0.040
+                    ),
+                    randomRange(
+                        0.010,
+                        0.024
+                    ),
+                    randomRange(
+                        0.035,
+                        0.075
+                    )
+                );
+
+
+            const material =
+                new THREE.MeshBasicMaterial({
+                    color:
+                        Math.random() >
+                            0.5
+                            ? 0x9a6738
+                            : 0x6e4527,
+
+                    transparent:
+                        true,
+
+                    opacity:
+                        0.95
+                });
+
+
+            const chip =
+                new THREE.Mesh(
+                    geometry,
+                    material
+                );
+
+
+            chip.position
+                .copy(
+                    point
+                )
+                .addScaledVector(
+                    surfaceNormal,
+                    0.035
+                );
+
+
+            chip.rotation.set(
+                randomRange(
+                    0,
+                    Math.PI
+                ),
+                randomRange(
+                    0,
+                    Math.PI
+                ),
+                randomRange(
+                    0,
+                    Math.PI
+                )
+            );
+
+
+            this.scene.add(
+                chip
+            );
+
+
+            const velocity =
+                surfaceNormal
+                    .clone()
+                    .multiplyScalar(
+                        randomRange(
+                            0.6,
+                            1.8
+                        )
+                    );
+
+
+            velocity.x +=
+                randomRange(
+                    -1.0,
+                    1.0
+                );
+
+            velocity.y +=
+                randomRange(
+                    0.35,
+                    1.8
+                );
+
+            velocity.z +=
+                randomRange(
+                    -1.0,
+                    1.0
+                );
+
+
+            const angularVelocity =
+                new THREE.Vector3(
+                    randomRange(
+                        -7,
+                        7
+                    ),
+                    randomRange(
+                        -7,
+                        7
+                    ),
+                    randomRange(
+                        -7,
+                        7
+                    )
+                );
+
+
+            this.activeEffects.push({
+                object:
+                    chip,
+
+                duration:
+                    randomRange(
+                        lifetime *
+                            0.75,
+                        lifetime *
+                            1.25
+                    ),
+
+                elapsed:
+                    0,
+
+                update: (
+                    delta,
+                    state
+                ) => {
+
+                    velocity.y -=
+                        6.5 *
+                        delta;
+
+
+                    chip.position
+                        .addScaledVector(
+                            velocity,
+                            delta
+                        );
+
+
+                    chip.rotation.x +=
+                        angularVelocity.x *
+                        delta;
+
+                    chip.rotation.y +=
+                        angularVelocity.y *
+                        delta;
+
+                    chip.rotation.z +=
+                        angularVelocity.z *
+                        delta;
+
+
+                    const t =
+                        clamp(
+                            state.elapsed /
+                                state.duration,
+                            0,
+                            1
+                        );
+
+
+                    material.opacity =
+                        0.95 *
+                        (
+                            1 -
+                            t
+                        );
+                }
+            });
+        }
+    }
+
+
+    // ========================================================
+    // Surface Impact V2 - 统一表面命中
+    // ========================================================
+
+    createBulletImpact(
+        point,
+        normal,
+        {
+            surfaceType =
+                "concrete"
+        } = {}
+    ) {
+
+        if (
+            !point ||
+            !normal
+        ) {
+
+            return;
+        }
+
+
+        const n =
+            normal
+                .clone()
+                .normalize();
+
+
+        const type =
+            String(
+                surfaceType ||
+                "concrete"
+            )
+                .toLowerCase();
+
+
+        // ====================================================
+        // METAL
+        // ====================================================
+
+        if (
+            type ===
+            "metal"
+        ) {
+
+            this.createBulletHole(
+                point,
+                n,
+                {
+                    size:
+                        randomRange(
+                            0.075,
+                            0.105
+                        ),
+
+                    color:
+                        0x0c0d0f
+                }
+            );
+
+
+            this.createImpactSpark(
+                point,
+                n,
+                {
+                    count:
+                        8,
+
+                    lifetime:
+                        0.22
+                }
+            );
+
+
+            /*
+             * 金属只留极少量灰尘，
+             * 避免和 concrete 看起来一样。
+             */
+            if (
+                Math.random() <
+                0.25
+            ) {
+
+                this.createImpactDust(
+                    point,
+                    n,
+                    {
+                        count:
+                            1,
+
+                        lifetime:
+                            0.20
+                    }
+                );
+            }
+
+
+            return;
+        }
+
+
+        // ====================================================
+        // WOOD
+        // ====================================================
+
+        if (
+            type ===
+            "wood"
+        ) {
+
+            this.createBulletHole(
+                point,
+                n,
+                {
+                    size:
+                        randomRange(
+                            0.095,
+                            0.135
+                        ),
+
+                    color:
+                        0x3e2415
+                }
+            );
+
+
+            this.createWoodChips(
+                point,
+                n,
+                {
+                    count:
+                        6,
+
+                    lifetime:
+                        0.36
+                }
+            );
+
+
+            /*
+             * 木头有少量浅棕灰尘，
+             * 但不产生金属火花。
+             */
+            this.createImpactDust(
+                point,
+                n,
+                {
+                    count:
+                        2,
+
+                    lifetime:
+                        0.28
+                }
+            );
+
+
+            return;
+        }
+
+
+        // ====================================================
+        // CONCRETE / DEFAULT
+        // ====================================================
+
+        const isGround =
+            n.y >
+            0.68;
+
+
+        this.createBulletHole(
+            point,
+            n,
+            {
+                size:
+                    isGround
+                        ? randomRange(
+                            0.085,
+                            0.120
+                        )
+                        : randomRange(
+                            0.10,
+                            0.145
+                        ),
+
+                color:
+                    0x151515
+            }
+        );
+
+
+        this.createImpactDust(
+            point,
+            n,
+            {
+                count:
+                    isGround
+                        ? 5
+                        : 3,
+
+                lifetime:
+                    isGround
+                        ? 0.38
+                        : 0.32
+            }
+        );
+
+
+        /*
+         * Concrete 只保留极少量火星，
+         * 让它和 Metal 明显区分。
+         */
+        if (
+            !isGround &&
+            Math.random() <
+                0.35
+        ) {
+
+            this.createImpactSpark(
+                point,
+                n,
+                {
+                    count:
+                        2,
+
+                    lifetime:
+                        0.14
+                }
             );
         }
     }
@@ -1370,6 +2263,9 @@ export class EffectsSystem {
 
         this.activeEffects.length = 0;
 
+        this.bulletHoleEffects.length = 0;
+
+
         this.cameraShake.amount = 0;
         this.cameraShake.duration = 0;
         this.cameraShake.elapsed = 0;
@@ -1445,13 +2341,14 @@ gameEvents.on(
             return;
         }
 
-        effects.createBulletHole(
+        effects.createBulletImpact(
             data.point,
-            data.normal
-        );
-
-        effects.createImpactSpark(
-            data.point
+            data.normal,
+            {
+                surfaceType:
+                    data.surfaceType ||
+                    "concrete"
+            }
         );
     }
 );

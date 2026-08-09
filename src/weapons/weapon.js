@@ -1341,6 +1341,47 @@ export class Weapon {
         }
 
 
+        // ----------------------------------------------------
+        // Surface Impact V2
+        //
+        // Raycast may hit a child mesh. Walk upward until a
+        // map object carrying userData.surfaceType is found.
+        // Unknown / legacy objects safely fall back to concrete.
+        // ----------------------------------------------------
+
+        let surfaceType =
+            "concrete";
+
+
+        let surfaceObject =
+            hit.object;
+
+
+        while (
+            surfaceObject
+        ) {
+
+            const candidate =
+                surfaceObject.userData
+                    ?.surfaceType;
+
+
+            if (
+                candidate
+            ) {
+
+                surfaceType =
+                    candidate;
+
+                break;
+            }
+
+
+            surfaceObject =
+                surfaceObject.parent;
+        }
+
+
         gameEvents.emit(
             "weapon:impact",
             {
@@ -1356,7 +1397,13 @@ export class Weapon {
                 normal,
 
                 object:
-                    hit.object
+                    hit.object,
+
+                surfaceObject:
+                    surfaceObject ||
+                    hit.object,
+
+                surfaceType
             }
         );
     }

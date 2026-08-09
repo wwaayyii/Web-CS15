@@ -69,6 +69,25 @@ export const MAP_OBJECT_TYPE = Object.freeze({
 });
 
 
+/*
+ * Surface Impact V2
+ *
+ * 地图物体的视觉材质类型。
+ * weapon.js 之后会读取 object.userData.surfaceType，
+ * effects.js 再根据它播放不同命中特效。
+ */
+export const SURFACE_TYPE = Object.freeze({
+    CONCRETE:
+        "concrete",
+
+    METAL:
+        "metal",
+
+    WOOD:
+        "wood"
+});
+
+
 // ============================================================
 // Map Registry
 //
@@ -572,7 +591,12 @@ export class GameMap {
             collision = true,
             weaponTarget = true,
             grenadeCollision = true,
-            aiCollision = true
+            aiCollision = true,
+
+            /*
+             * 未显式指定时，根据 map object type 自动推断。
+             */
+            surfaceType = null
         } = {}
     ) {
 
@@ -581,6 +605,54 @@ export class GameMap {
 
         object.userData.mapType =
             type;
+
+
+        // ====================================================
+        // Surface Impact V2
+        // ====================================================
+
+        let resolvedSurfaceType =
+            surfaceType;
+
+
+        if (
+            !resolvedSurfaceType
+        ) {
+
+            switch (
+                type
+            ) {
+
+                case MAP_OBJECT_TYPE.CRATE:
+
+                    resolvedSurfaceType =
+                        SURFACE_TYPE.WOOD;
+
+                    break;
+
+
+                case MAP_OBJECT_TYPE.COVER:
+
+                    resolvedSurfaceType =
+                        SURFACE_TYPE.METAL;
+
+                    break;
+
+
+                case MAP_OBJECT_TYPE.FLOOR:
+                case MAP_OBJECT_TYPE.WALL:
+                default:
+
+                    resolvedSurfaceType =
+                        SURFACE_TYPE.CONCRETE;
+
+                    break;
+            }
+        }
+
+
+        object.userData.surfaceType =
+            resolvedSurfaceType;
 
 
         object.castShadow =
