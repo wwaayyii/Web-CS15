@@ -376,7 +376,40 @@ export class UISystem {
         this.handlers.roundStart =
             () => {
 
-                this.closeAllMenus();
+                /*
+                 * Freeze Time 结束进入 LIVE 时，
+                 * 不主动关闭购买菜单。
+                 *
+                 * Buy Time 由 economy.js 独立计时，
+                 * 玩家可以在 LIVE 开始后继续完成购买。
+                 */
+            };
+
+
+        this.handlers.buyTimeEnded =
+            () => {
+
+                /*
+                 * Buy Time 真正结束以后，
+                 * 如果购买菜单仍然打开：
+                 *
+                 * 1. 自动关闭购买菜单
+                 * 2. 自动把鼠标重新锁回游戏
+                 *
+                 * 不影响 BOT Menu / Radio Menu。
+                 */
+                if (
+                    !this.buyMenuOpen
+                ) {
+
+                    return;
+                }
+
+
+                this.closeBuyMenu({
+                    returnToGame:
+                        true
+                });
             };
 
 
@@ -541,6 +574,12 @@ export class UISystem {
         gameEvents.on(
             "round:start",
             this.handlers.roundStart
+        );
+
+
+        gameEvents.on(
+            "economy:buy-time-ended",
+            this.handlers.buyTimeEnded
         );
 
 
@@ -1787,6 +1826,12 @@ export class UISystem {
         gameEvents.off(
             "round:start",
             this.handlers.roundStart
+        );
+
+
+        gameEvents.off(
+            "economy:buy-time-ended",
+            this.handlers.buyTimeEnded
         );
 
 
