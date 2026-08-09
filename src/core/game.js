@@ -227,7 +227,7 @@ export class Game {
          *
          * W / A / S / D = 水平移动
          * Space = 上升
-         * Ctrl = 下降
+         * CapsLock = 下降
          * Shift = 加速
          */
         this.spectatorSpeed =
@@ -1824,6 +1824,158 @@ export class Game {
 
 
         // ----------------------------------------------------
+        // Pause Menu V2
+        // ----------------------------------------------------
+
+        gameEvents.on(
+            "ui:pause-request",
+            () => {
+
+                if (
+                    !this.gameplayStarted
+                ) {
+
+                    return;
+                }
+
+
+                this.keys.clear();
+
+                this.player
+                    ?.stopFire?.();
+
+                this.setPaused(
+                    true
+                );
+            }
+        );
+
+
+        gameEvents.on(
+            "ui:resume-request",
+            () => {
+
+                if (
+                    !this.gameplayStarted
+                ) {
+
+                    return;
+                }
+
+
+                this.keys.clear();
+
+                this.setPaused(
+                    false
+                );
+            }
+        );
+
+
+        gameEvents.on(
+            "ui:restart-round-request",
+            () => {
+
+                if (
+                    !this.gameplayStarted
+                ) {
+
+                    return;
+                }
+
+
+                this.keys.clear();
+
+                this.player
+                    ?.stopFire?.();
+
+                this.setPaused(
+                    false
+                );
+
+
+                round.startNextRound();
+
+
+                ui.hidePauseMenu();
+
+
+                window.setTimeout(
+                    () => {
+
+                        ui.requestGameFocus();
+
+                    },
+                    0
+                );
+            }
+        );
+
+
+        gameEvents.on(
+            "ui:restart-match-request",
+            () => {
+
+                if (
+                    !this.gameplayStarted
+                ) {
+
+                    return;
+                }
+
+
+                this.keys.clear();
+
+                this.player
+                    ?.stopFire?.();
+
+                this.setPaused(
+                    false
+                );
+
+
+                round.startMatch({
+                    resetScore:
+                        true,
+
+                    resetPlayer:
+                        true,
+
+                    resetBots:
+                        true
+                });
+
+
+                ui.hidePauseMenu();
+
+
+                window.setTimeout(
+                    () => {
+
+                        ui.requestGameFocus();
+
+                    },
+                    0
+                );
+            }
+        );
+
+
+        gameEvents.on(
+            "ui:main-menu-request",
+            () => {
+
+                /*
+                 * 当前地图由 URL 管理。
+                 * reload 可彻底清掉旧 Round / BOT / Economy 状态，
+                 * 并重新回到 Main Menu V2。
+                 */
+                window.location.reload();
+            }
+        );
+
+
+        // ----------------------------------------------------
         // Freeze Start → BOT Auto Buy
         // ----------------------------------------------------
 
@@ -2791,9 +2943,9 @@ export class Game {
                     INPUT_CONFIG.moveRight
                 ),
 
-            sprint:
+            walk:
                 this.keys.has(
-                    INPUT_CONFIG.sprint
+                    INPUT_CONFIG.walk
                 )
         });
     }
@@ -2804,7 +2956,7 @@ export class Game {
     //
     // W / A / S / D
     // Space = Up
-    // Ctrl = Down
+    // CapsLock = Down
     // Shift = Fast
     // ========================================================
 
@@ -2908,7 +3060,7 @@ export class Game {
 
 
         // ----------------------------------------------------
-        // Ctrl = Down
+        // CapsLock = Down
         // ----------------------------------------------------
 
         if (
@@ -2932,7 +3084,7 @@ export class Game {
 
         if (
             this.keys.has(
-                INPUT_CONFIG.sprint
+                INPUT_CONFIG.walk
             )
         ) {
 
@@ -3570,15 +3722,25 @@ export class Game {
             );
 
 
+        const roundState =
+            round.getState?.().state;
+
+
+        const roundAllowsControl =
+            roundState === "LIVE";
+
+
         this.player
             ?.setControlsEnabled(
-                !this.paused
+                !this.paused &&
+                roundAllowsControl
             );
 
 
         this.botAIManager
             ?.setEnabled(
-                !this.paused
+                !this.paused &&
+                roundAllowsControl
             );
 
 

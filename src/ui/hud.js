@@ -90,7 +90,9 @@ export class HUDSystem {
 
             radioMessage: null,
 
-            statusText: null
+            statusText: null,
+
+            crosshair: null
         };
 
 
@@ -106,6 +108,26 @@ export class HUDSystem {
 
         this.killFeedEntries =
             [];
+
+
+        // ====================================================
+        // Dynamic Crosshair V2
+        // ====================================================
+
+        this.crosshairFrameId =
+            null;
+
+
+        this.crosshairVisualGap =
+            0;
+
+
+        this.crosshairTargetGap =
+            0;
+
+
+        this.crosshairLastTime =
+            performance.now();
 
 
         // ====================================================
@@ -241,6 +263,12 @@ export class HUDSystem {
             );
 
 
+        this.elements.crosshair =
+            root.getElementById(
+                "crosshair"
+            );
+
+
         this._bindEvents();
 
 
@@ -249,6 +277,9 @@ export class HUDSystem {
 
 
         this.refreshAll();
+
+
+        this.startDynamicCrosshair();
 
 
         return this;
@@ -315,6 +346,11 @@ export class HUDSystem {
                 this.refreshPlayer();
 
                 this.refreshWeapon();
+
+
+                this.updateCrosshairCrouch(
+                    false
+                );
             };
 
 
@@ -468,6 +504,30 @@ export class HUDSystem {
                     data.weapon
                         ?.reserveAmmo ??
                         0
+                );
+            };
+
+
+        // ----------------------------------------------------
+        // Crouch / Crosshair
+        // ----------------------------------------------------
+
+        this.handlers.playerCrouch =
+            data => {
+
+                if (
+                    data.player !==
+                    this.player
+                ) {
+
+                    return;
+                }
+
+
+                this.updateCrosshairCrouch(
+                    Boolean(
+                        data.crouching
+                    )
                 );
             };
 
@@ -811,6 +871,12 @@ export class HUDSystem {
 
 
         gameEvents.on(
+            "player:crouch",
+            this.handlers.playerCrouch
+        );
+
+
+        gameEvents.on(
             GAME_EVENT.ROUND_FREEZE_START,
             this.handlers.freezeStart
         );
@@ -929,6 +995,279 @@ export class HUDSystem {
         this.updateMoney(
             this.player.money
         );
+
+
+        this.updateCrosshairCrouch(
+            Boolean(
+                this.player.isCrouching
+            )
+        );
+    }
+
+
+    // ========================================================
+    // Dynamic Crosshair V2
+    // ========================================================
+
+    updateCrosshairCrouch(
+        crouching
+    ) {
+
+        const element =
+            this.elements.crosshair;
+
+
+        if (!element) {
+            return;
+        }
+
+
+        element.classList.toggle(
+            "crosshair-crouched",
+            Boolean(
+                crouching
+            )
+        );
+
+
+        element.dataset.stance =
+            crouching
+                ? "crouch"
+                : "stand";
+    }
+
+
+    startDynamicCrosshair() {
+
+        if (
+            this.crosshairFrameId
+        ) {
+
+            return;
+        }
+
+
+        this.crosshairLastTime =
+            performance.now();
+
+
+        const tick =
+            now => {
+
+                this.crosshairFrameId =
+                    window.requestAnimationFrame(
+                        tick
+                    );
+
+
+                const delta =
+                    Math.min(
+                        0.05,
+                        Math.max(
+                            0,
+                            (
+                                now -
+                                this.crosshairLastTime
+                            ) /
+                            1000
+                        )
+                    );
+
+
+                this.crosshairLastTime =
+                    now;
+
+
+                this.updateDynamicCrosshair(
+                    delta
+                );
+            };
+
+
+        this.crosshairFrameId =
+            window.requestAnimationFrame(
+                tick
+            );
+    }
+
+
+    stopDynamicCrosshair() {
+
+        if (
+            !this.crosshairFrameId
+        ) {
+
+            return;
+        }
+
+
+        window.cancelAnimationFrame(
+            this.crosshairFrameId
+        );
+
+
+        this.crosshairFrameId =
+            null;
+    }
+
+
+    updateDynamicCrosshair(
+        delta = 0.016
+    ) {
+
+        const element =
+            this.elements.crosshair;
+
+
+        const player =
+            this.player;
+
+
+        if (
+            !element ||
+            !player
+        ) {
+
+            return;
+        }
+
+
+        const weapon =
+            player.inventory
+                ?.currentWeapon;
+
+
+        if (!weapon) {
+
+            element.style.setProperty(
+                "--crosshair-gap",
+                "3px"
+            );
+
+
+            return;
+        }
+
+
+        const crouching =
+            Boolean(
+                player.isCrouching
+            );
+
+
+        const airborne =
+            !player.isGrounded;
+
+
+        const movementFactor =
+            Number(
+                player.movementFactor ??
+                0
+            );
+
+
+        const spread =
+            typeof weapon.getCurrentSpread ===
+                "function"
+                ? weapon.getCurrentSpread({
+                    movementFactor,
+                    crouching,
+                    crouchAccuracyMultiplier:
+                        player
+                            .crouchAccuracyMultiplier ??
+                        0.70,
+                    airborne
+                })
+                : 0;
+
+
+        /*
+         * 把真实 spread 映射到屏幕准心间距。
+         *
+         * 典型值：
+         * crouch 0.005  -> 小
+         * stand  0.008  -> 基础
+         * move   0.03+  -> 明显变大
+         * air    0.10+  -> 最大
+         *
+         * recoil 已经包含在 getCurrentSpread() 中。
+         */
+        let targetGap =
+            2.2 +
+            spread *
+                155;
+
+
+        if (
+            player.isWalking
+        ) {
+
+            /*
+             * Shift 静步视觉再收一点，
+             * 但真实 spread 仍然以 weapon.js 为准。
+             */
+            targetGap *=
+                0.92;
+        }
+
+
+        targetGap =
+            clamp(
+                targetGap,
+                2.2,
+                18
+            );
+
+
+        this.crosshairTargetGap =
+            targetGap;
+
+
+        /*
+         * 扩张稍快，回收稍慢，
+         * 更接近 FPS 动态准心手感。
+         */
+        const expanding =
+            this.crosshairTargetGap >
+            this.crosshairVisualGap;
+
+
+        const response =
+            expanding
+                ? 18
+                : 10;
+
+
+        this.crosshairVisualGap +=
+            (
+                this.crosshairTargetGap -
+                this.crosshairVisualGap
+            ) *
+            Math.min(
+                1,
+                delta *
+                    response
+            );
+
+
+        element.style.setProperty(
+            "--crosshair-gap",
+            `${this.crosshairVisualGap.toFixed(
+                2
+            )}px`
+        );
+
+
+        element.dataset.dynamicState =
+            airborne
+                ? "air"
+                : crouching
+                    ? "crouch"
+                    : player.isWalking
+                        ? "walk"
+                        : player.isMoving
+                            ? "move"
+                            : "stand";
     }
 
 
@@ -1516,6 +1855,16 @@ export class HUDSystem {
             );
 
 
+        const attackerIsPlayer =
+            attacker ===
+            this.player;
+
+
+        const victimIsPlayer =
+            victim ===
+            this.player;
+
+
         const entry =
             document.createElement(
                 "div"
@@ -1526,9 +1875,40 @@ export class HUDSystem {
             "kill-feed-entry";
 
 
+        if (
+            attackerIsPlayer
+        ) {
+
+            entry.classList.add(
+                "kill-feed-entry-player-kill"
+            );
+        }
+
+
+        if (
+            victimIsPlayer
+        ) {
+
+            entry.classList.add(
+                "kill-feed-entry-player-death"
+            );
+        }
+
+
+        if (
+            headshot
+        ) {
+
+            entry.classList.add(
+                "kill-feed-entry-headshot"
+            );
+        }
+
+
         entry.innerHTML =
             `
             <span
+                class="kill-feed-name"
                 style="color:${attackerColor}"
             >
                 ${this._escapeHTML(
@@ -1537,18 +1917,26 @@ export class HUDSystem {
             </span>
 
             <span class="kill-feed-weapon">
-                ${this._escapeHTML(
+                [${this._escapeHTML(
                     weapon || "?"
-                )}
+                )}]
             </span>
 
             ${
                 headshot
-                    ? `<span class="kill-feed-headshot">★</span>`
+                    ? `
+                    <span
+                        class="kill-feed-headshot"
+                        title="Headshot"
+                    >
+                        HEADSHOT
+                    </span>
+                    `
                     : ""
             }
 
             <span
+                class="kill-feed-name"
                 style="color:${victimColor}"
             >
                 ${this._escapeHTML(
@@ -1639,7 +2027,7 @@ export class HUDSystem {
         data = {}
     ) {
 
-        const attacker =
+        let attacker =
             data.attacker;
 
 
@@ -1695,8 +2083,11 @@ export class HUDSystem {
                 weaponName,
 
             headshot:
-                data.hitZone ===
-                "head"
+                Boolean(
+                    data.headshot ||
+                    data.hitZone ===
+                        "head"
+                )
         });
     }
 
@@ -2122,6 +2513,12 @@ export class HUDSystem {
 
 
         gameEvents.off(
+            "player:crouch",
+            this.handlers.playerCrouch
+        );
+
+
+        gameEvents.off(
             GAME_EVENT.ROUND_FREEZE_START,
             this.handlers.freezeStart
         );
@@ -2191,6 +2588,9 @@ export class HUDSystem {
             "ui:buy-failed",
             this.handlers.buyFailed
         );
+
+
+        this.stopDynamicCrosshair();
 
 
         for (

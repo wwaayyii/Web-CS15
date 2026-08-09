@@ -10,7 +10,7 @@
  * - 移动
  * - 跳跃
  * - 蹲下
- * - Sprint
+ * - Walk / 静步
  * - 武器库存
  * - 开火
  * - Reload
@@ -206,7 +206,7 @@ export class Player {
             false;
 
 
-        this.isSprinting =
+        this.isWalking =
             false;
 
 
@@ -247,7 +247,7 @@ export class Player {
 
             crouch: false,
 
-            sprint: false,
+            walk: false,
 
             fire: false
         };
@@ -263,6 +263,18 @@ export class Player {
 
         this.footstepTimer =
             0;
+
+
+        /*
+         * Crouch Accuracy V1
+         *
+         * 当具体武器没有单独配置 spread.crouch 时，
+         * weapon.js 会使用这个倍率作为 fallback。
+         *
+         * 0.70 = 下蹲时基础散布约降低 30%。
+         */
+        this.crouchAccuracyMultiplier =
+            0.70;
 
 
         // ====================================================
@@ -687,7 +699,7 @@ export class Player {
         backward,
         left,
         right,
-        sprint
+        walk
     } = {}) {
 
         if (
@@ -739,13 +751,13 @@ export class Player {
 
 
         if (
-            sprint !==
+            walk !==
             undefined
         ) {
 
-            this.input.sprint =
+            this.input.walk =
                 Boolean(
-                    sprint
+                    walk
                 );
         }
     }
@@ -892,13 +904,19 @@ export class Player {
 
 
         // ====================================================
-        // Sprint
+        // Walk / 静步
         // ====================================================
 
-        this.isSprinting =
-            this.input.sprint &&
-            !this.isCrouching &&
-            forward > 0;
+        /*
+         * Web Control V2:
+         * Shift 不再是 Sprint，而是 CS 风格静步。
+         *
+         * 为了避免依赖 config.js 新增参数，这里直接基于
+         * 当前正常移动速度计算 55% 的静步速度。
+         */
+        this.isWalking =
+            this.input.walk &&
+            this.isMoving;
 
 
         let speed =
@@ -915,12 +933,11 @@ export class Player {
                     .crouchSpeed;
 
         } else if (
-            this.isSprinting
+            this.isWalking
         ) {
 
-            speed =
-                PLAYER_CONFIG
-                    .runSpeed;
+            speed *=
+                0.55;
         }
 
 
@@ -1061,18 +1078,18 @@ export class Player {
 
 
         if (
-            this.isSprinting
-        ) {
-
-            return 1;
-        }
-
-
-        if (
             this.isCrouching
         ) {
 
             return 0.25;
+        }
+
+
+        if (
+            this.isWalking
+        ) {
+
+            return 0.35;
         }
 
 
@@ -1166,7 +1183,7 @@ export class Player {
             this.isCrouching
         ) {
 
-            this.isSprinting =
+            this.isWalking =
                 false;
         }
 
@@ -1178,7 +1195,12 @@ export class Player {
                     this,
 
                 crouching:
+                    this.isCrouching,
+
+                accuracyMultiplier:
                     this.isCrouching
+                        ? this.crouchAccuracyMultiplier
+                        : 1
             }
         );
     }
@@ -1251,18 +1273,27 @@ export class Player {
         }
 
 
+        /*
+         * Shift 静步不产生脚步事件。
+         * 以后 BOT 如果监听 player:footstep，
+         * 也自然无法通过脚步声发现静步玩家。
+         */
+        if (
+            this.isWalking
+        ) {
+
+            this.footstepTimer =
+                0;
+
+            return;
+        }
+
+
         let interval =
             0.48;
 
 
         if (
-            this.isSprinting
-        ) {
-
-            interval =
-                0.34;
-
-        } else if (
             this.isCrouching
         ) {
 
@@ -1293,8 +1324,11 @@ export class Player {
                     position:
                         this.getPosition(),
 
+                    walking:
+                        this.isWalking,
+
                     sprinting:
-                        this.isSprinting,
+                        false,
 
                     crouching:
                         this.isCrouching
@@ -1357,6 +1391,9 @@ export class Player {
 
                     crouching:
                         this.isCrouching,
+
+                    crouchAccuracyMultiplier:
+                        this.crouchAccuracyMultiplier,
 
                     airborne:
                         !this.isGrounded
@@ -2046,7 +2083,7 @@ export class Player {
             false;
 
 
-        this.isSprinting =
+        this.isWalking =
             false;
 
 
@@ -2137,18 +2174,6 @@ export class Player {
                     this.kills
             }
         );
-    }
-
-
-    // ========================================================
-    // Team Label
-    // ========================================================
-
-    get teamLabel() {
-
-        return this.team === TEAM.T
-            ? "T"
-            : "CT";
     }
 
 
@@ -2339,7 +2364,7 @@ export class Player {
             false;
 
 
-        this.isSprinting =
+        this.isWalking =
             false;
 
 
@@ -2388,8 +2413,24 @@ export class Player {
                 position.isVector3
             ) {
 
+                /*
+                 * 地图 Spawn 点的 Y 通常表示地面高度，
+                 * 当前地图一般返回 y = 0。
+                 *
+                 * Player 的 PointerLock 控制对象 Y
+                 * 表示第一人称视点高度，因此不能直接
+                 * 把地图 Spawn Vector3 原样复制进去。
+                 *
+                 * 否则 Freeze Time 期间视角会贴近地面，
+                 * 等解冻后 updateEyeHeight() 才突然升高。
+                 */
                 this.setPosition(
-                    position
+                    position.x,
+
+                    PLAYER_CONFIG
+                        .eyeHeight,
+
+                    position.z
                 );
 
             } else {
@@ -2495,7 +2536,7 @@ export class Player {
 			false;
 
 
-		this.isSprinting =
+		this.isWalking =
 			false;
 
 
@@ -2632,7 +2673,11 @@ export class Player {
                 false;
 
 
-            this.input.sprint =
+            this.input.walk =
+                false;
+
+
+            this.input.crouch =
                 false;
 
 
@@ -2640,8 +2685,13 @@ export class Player {
                 false;
 
 
-            this.isSprinting =
+            this.isWalking =
                 false;
+
+
+            this.setCrouching(
+                false
+            );
         }
     }
 
@@ -2737,8 +2787,15 @@ export class Player {
             crouching:
                 this.isCrouching,
 
+            walking:
+                this.isWalking,
+
+            /*
+             * 兼容旧 HUD / 调试代码。
+             * Web Control V2 已取消 Sprint。
+             */
             sprinting:
-                this.isSprinting,
+                false,
 
             grounded:
                 this.isGrounded,

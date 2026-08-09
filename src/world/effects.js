@@ -59,6 +59,10 @@ export class EffectsSystem {
         this.hitmarkerElement = null;
 
         this.damageOverlayElement = null;
+
+        this.combatFeedbackElement = null;
+
+        this.combatFeedbackTimer = null;
     }
 
 
@@ -101,6 +105,37 @@ export class EffectsSystem {
             document.getElementById(
                 "damage-indicator"
             );
+
+
+        this.combatFeedbackElement =
+            document.getElementById(
+                "combat-feedback"
+            );
+
+
+        if (
+            !this.combatFeedbackElement
+        ) {
+
+            this.combatFeedbackElement =
+                document.createElement(
+                    "div"
+                );
+
+
+            this.combatFeedbackElement.id =
+                "combat-feedback";
+
+
+            this.combatFeedbackElement.className =
+                "combat-feedback";
+
+
+            document.body.appendChild(
+                this.combatFeedbackElement
+            );
+        }
+
 
         this.initialized = true;
 
@@ -863,49 +898,118 @@ export class EffectsSystem {
     // ========================================================
 
     showHitmarker({
-        kill = false
+        kill = false,
+        headshot = false
     } = {}) {
 
         const element =
             this.hitmarkerElement;
 
+
         if (!element) {
             return;
         }
+
 
         const lines =
             element.querySelectorAll(
                 ".hit-line"
             );
 
+
+        let color =
+            "#ffffff";
+
+
+        let glow =
+            "#ffffff";
+
+
+        let scale =
+            1;
+
+
+        if (
+            headshot &&
+            kill
+        ) {
+
+            color =
+                "#ffb52e";
+
+            glow =
+                "#ff8a00";
+
+            scale =
+                1.42;
+
+        } else if (
+            kill
+        ) {
+
+            color =
+                "#ff3d3d";
+
+            glow =
+                "#ff2d2d";
+
+            scale =
+                1.32;
+
+        } else if (
+            headshot
+        ) {
+
+            color =
+                "#ffd84d";
+
+            glow =
+                "#ffb300";
+
+            scale =
+                1.20;
+        }
+
+
         lines.forEach(
             line => {
 
                 line.style.backgroundColor =
-                    kill
-                        ? "#ff3333"
-                        : "#ffffff";
+                    color;
+
 
                 line.style.boxShadow =
-                    kill
-                        ? "0 0 6px #ff3333"
-                        : "0 0 4px #ffffff";
+                    `0 0 ${
+                        kill
+                            ? 8
+                            : 5
+                    }px ${glow}`;
             }
         );
+
 
         element.style.opacity =
             "1";
 
+
+        /*
+         * 原 CSS 已经负责 translate(-50%, -50%)。
+         * 这里不能直接写 scale() 覆盖 translate，
+         * 否则 Hitmarker 会偏离准星中心。
+         */
         element.style.transform =
-            kill
-                ? "scale(1.3)"
-                : "scale(1)";
+            `translate(-50%, -50%) scale(${scale})`;
+
 
         window.setTimeout(
             () => {
 
                 element.style.opacity =
                     "0";
+
+
+                element.style.transform =
+                    "translate(-50%, -50%) scale(1)";
 
             },
             kill
@@ -914,6 +1018,124 @@ export class EffectsSystem {
                 : HUD_CONFIG.hitmarker
                     .duration
         );
+    }
+
+
+    // ========================================================
+    // Combat Feedback Text
+    // ========================================================
+
+    showCombatFeedback({
+        headshot = false,
+        kill = false
+    } = {}) {
+
+        const element =
+            this.combatFeedbackElement;
+
+
+        if (!element) {
+            return;
+        }
+
+
+        let text =
+            "";
+
+
+        let type =
+            "hit";
+
+
+        if (
+            headshot &&
+            kill
+        ) {
+
+            text =
+                "HEADSHOT KILL";
+
+            type =
+                "headshot-kill";
+
+        } else if (
+            kill
+        ) {
+
+            text =
+                "KILL";
+
+            type =
+                "kill";
+
+        } else if (
+            headshot
+        ) {
+
+            text =
+                "HEADSHOT";
+
+            type =
+                "headshot";
+        }
+
+
+        if (!text) {
+            return;
+        }
+
+
+        if (
+            this.combatFeedbackTimer
+        ) {
+
+            window.clearTimeout(
+                this.combatFeedbackTimer
+            );
+        }
+
+
+        element.textContent =
+            text;
+
+
+        element.dataset.type =
+            type;
+
+
+        element.classList.remove(
+            "combat-feedback-show"
+        );
+
+
+        /*
+         * 强制 reflow，确保连续爆头时动画能重新播放。
+         */
+        void element.offsetWidth;
+
+
+        element.classList.add(
+            "combat-feedback-show"
+        );
+
+
+        this.combatFeedbackTimer =
+            window.setTimeout(
+                () => {
+
+                    element.classList.remove(
+                        "combat-feedback-show"
+                    );
+
+
+                    this.combatFeedbackTimer =
+                        null;
+
+                },
+                kill
+                    ? 700
+                    : 520
+            );
     }
 
 
@@ -1172,6 +1394,29 @@ export class EffectsSystem {
 
         this.damageOverlayElement = null;
 
+
+        if (
+            this.combatFeedbackTimer
+        ) {
+
+            window.clearTimeout(
+                this.combatFeedbackTimer
+            );
+
+
+            this.combatFeedbackTimer =
+                null;
+        }
+
+
+        this.combatFeedbackElement
+            ?.remove();
+
+
+        this.combatFeedbackElement =
+            null;
+
+
         this.initialized = false;
     }
 }
@@ -1216,12 +1461,60 @@ gameEvents.on(
     "weapon:hit",
     (data = {}) => {
 
+        /*
+         * Hitmarker 是第一人称玩家反馈，
+         * 不能因为 BOT 互相开枪就在玩家屏幕上闪。
+         */
+        const owner =
+            data.owner ||
+            data.attacker;
+
+
+        const isLocalPlayer =
+            owner?.constructor?.name ===
+                "Player" ||
+            owner?.name ===
+                "PLAYER (You)";
+
+
+        if (
+            !isLocalPlayer
+        ) {
+
+            return;
+        }
+
+
+        const headshot =
+            Boolean(
+                data.headshot ||
+                data.hitZone ===
+                    "head"
+            );
+
+
+        const kill =
+            Boolean(
+                data.kill
+            );
+
+
         effects.showHitmarker({
-            kill:
-                Boolean(
-                    data.kill
-                )
+            kill,
+            headshot
         });
+
+
+        if (
+            headshot ||
+            kill
+        ) {
+
+            effects.showCombatFeedback({
+                headshot,
+                kill
+            });
+        }
     }
 );
 

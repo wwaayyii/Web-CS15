@@ -622,6 +622,8 @@ export class Weapon {
 
         crouching = false,
 
+        crouchAccuracyMultiplier = 0.70,
+
         airborne = false,
 
         friendlyFire = false,
@@ -751,6 +753,7 @@ export class Weapon {
                 {
                     movementFactor,
                     crouching,
+                    crouchAccuracyMultiplier,
                     airborne
                 }
             );
@@ -789,61 +792,108 @@ export class Weapon {
 
 
     // ========================================================
-    // Spread
+    // Current Spread
+    //
+    // Dynamic Crosshair 与真实弹道共用这一套计算。
+    // 这里只计算 spread 数值，不修改射击方向。
     // ========================================================
 
-    applySpread(
-        baseDirection,
-        {
-            movementFactor = 0,
-            crouching = false,
-            airborne = false
-        } = {}
-    ) {
+    getCurrentSpread({
+        movementFactor = 0,
+        crouching = false,
+        crouchAccuracyMultiplier = 0.70,
+        airborne = false
+    } = {}) {
 
         const spreadConfig =
-            this.config.spread;
+            this.config.spread ??
+            {};
 
-        if (!spreadConfig) {
 
-            return baseDirection
-                .clone()
-                .normalize();
-        }
+        /*
+         * 兼容两种配置命名：
+         *
+         * 1) stand / move / crouch / air
+         * 2) base / movement / airborne
+         */
+        const standSpread =
+            Number(
+                spreadConfig.stand ??
+                spreadConfig.base ??
+                0
+            ) || 0;
 
 
         let spread =
-            spreadConfig.stand ??
-            0;
+            standSpread;
 
+
+        // ----------------------------------------------------
+        // Airborne
+        // ----------------------------------------------------
 
         if (airborne) {
 
             spread =
-                spreadConfig.air ??
-                spread;
+                Number(
+                    spreadConfig.air ??
+                    spreadConfig.airborne ??
+                    spreadConfig.jump ??
+                    standSpread
+                ) || standSpread;
+
+        // ----------------------------------------------------
+        // Crouch
+        // ----------------------------------------------------
 
         } else if (crouching) {
 
-            spread =
-                spreadConfig.crouch ??
-                spread;
+            if (
+                spreadConfig.crouch != null
+            ) {
+
+                spread =
+                    Number(
+                        spreadConfig.crouch
+                    ) || 0;
+
+            } else {
+
+                spread *=
+                    clamp(
+                        Number(
+                            crouchAccuracyMultiplier
+                        ) || 0.70,
+                        0.45,
+                        1
+                    );
+            }
+
+        // ----------------------------------------------------
+        // Movement
+        // ----------------------------------------------------
 
         } else if (
             movementFactor > 0
         ) {
 
             const moveSpread =
-                spreadConfig.move ??
-                spread;
+                Number(
+                    spreadConfig.move ??
+                    spreadConfig.movement ??
+                    standSpread
+                ) || standSpread;
+
 
             spread +=
                 (
                     moveSpread -
-                    spread
+                    standSpread
                 ) *
                 clamp(
-                    movementFactor,
+                    Number(
+                        movementFactor
+                    ) || 0,
                     0,
                     1
                 );
@@ -851,22 +901,86 @@ export class Weapon {
 
 
         // ----------------------------------------------------
-        // 连射后增加额外散布
+        // Recoil spread
         // ----------------------------------------------------
 
+        /*
+         * 优先使用显式 recoil.spread。
+         * 如果旧配置没有该字段，则保持当前基础散布，
+         * 避免擅自改变已经测试通过的武器手感。
+         */
         const recoilSpread =
-            this.currentRecoil *
-            0.08;
+            Number(
+                this.config.recoil
+                    ?.spread ??
+                0
+            ) || 0;
 
 
         spread +=
+            Math.max(
+                0,
+                Number(
+                    this.currentRecoil
+                ) || 0
+            ) *
             recoilSpread;
+
+
+        return Math.max(
+            0,
+            spread
+        );
+    }
+
+
+    // ========================================================
+    // Spread
+    //
+    // 只负责把 spread 应用到真实射击方向。
+    // ========================================================
+
+    applySpread(
+        baseDirection,
+        {
+            movementFactor = 0,
+            crouching = false,
+            crouchAccuracyMultiplier = 0.70,
+            airborne = false
+        } = {}
+    ) {
+
+        if (!baseDirection) {
+
+            return new THREE.Vector3(
+                0,
+                0,
+                -1
+            );
+        }
+
+
+        const spread =
+            this.getCurrentSpread({
+                movementFactor,
+                crouching,
+                crouchAccuracyMultiplier,
+                airborne
+            });
 
 
         const direction =
             baseDirection
                 .clone()
                 .normalize();
+
+
+        if (
+            spread <= 0
+        ) {
+
+            return direction;
+        }
 
 
         // ----------------------------------------------------
@@ -915,7 +1029,7 @@ export class Weapon {
 
 
         // ----------------------------------------------------
-        // 随机散布
+        // 保留项目原有的随机散布方式
         // ----------------------------------------------------
 
         const horizontal =
@@ -1443,7 +1557,13 @@ export class Weapon {
                 this.isReloading,
 
             reloadTimeLeft:
-                this.reloadTimeLeft
+                this.reloadTimeLeft,
+
+            currentRecoil:
+                this.currentRecoil,
+
+            currentSpread:
+                this.getCurrentSpread()
         };
     }
 
@@ -2571,6 +2691,8 @@ export class WeaponSystem {
 
             crouching = false,
 
+            crouchAccuracyMultiplier = 0.70,
+
             airborne = false,
 
             currentTime =
@@ -2597,6 +2719,8 @@ export class WeaponSystem {
             movementFactor,
 
             crouching,
+
+            crouchAccuracyMultiplier,
 
             airborne,
 

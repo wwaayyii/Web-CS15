@@ -1561,8 +1561,14 @@ export const INPUT_CONFIG = freezeDeep({
 
     jump: "Space",
 
-    crouch: "ControlLeft",
+    // Web Control V2
+    // Hold CapsLock = crouch
+    crouch: "CapsLock",
 
+    // Hold Shift = silent walk
+    walk: "ShiftLeft",
+
+    // Legacy alias kept temporarily for older modules.
     sprint: "ShiftLeft",
 
     reload: "KeyR",

@@ -92,6 +92,12 @@ export class UISystem {
 
             pauseText: null,
 
+            pauseOverlay: null,
+            pauseResume: null,
+            pauseRestartRound: null,
+            pauseRestartMatch: null,
+            pauseMainMenu: null,
+
             mapButtons: [],
             selectedMapLabel: null
         };
@@ -111,6 +117,22 @@ export class UISystem {
             false;
 
         this.pointerLocked =
+            false;
+
+        this.pauseMenuOpen =
+            false;
+
+        this.gameplayStarted =
+            false;
+
+
+        /*
+         * Pointer Lock Recovery
+         *
+         * ESC 是浏览器退出 Pointer Lock 的保留键。
+         * 不能假设 ESC keydown 后立即 lock() 一定成功。
+         */
+        this.pointerLockResumePending =
             false;
 
 
@@ -207,6 +229,36 @@ export class UISystem {
         this.elements.pauseText =
             root.getElementById(
                 "pause-text"
+            );
+
+
+        this.elements.pauseOverlay =
+            root.getElementById(
+                "pause-overlay"
+            );
+
+
+        this.elements.pauseResume =
+            root.getElementById(
+                "pause-resume"
+            );
+
+
+        this.elements.pauseRestartRound =
+            root.getElementById(
+                "pause-restart-round"
+            );
+
+
+        this.elements.pauseRestartMatch =
+            root.getElementById(
+                "pause-restart-match"
+            );
+
+
+        this.elements.pauseMainMenu =
+            root.getElementById(
+                "pause-main-menu"
             );
 
 
@@ -324,18 +376,91 @@ export class UISystem {
                     );
 
 
+                // ============================================
+                // Pointer Lock restored
+                // ============================================
+
                 if (
                     this.pointerLocked
                 ) {
 
+                    this.pointerLockResumePending =
+                        false;
+
+
                     this.hideStartOverlay();
 
-                } else {
+
+                    /*
+                     * Pause Menu 只有在 Pointer Lock
+                     * 真正恢复成功以后才允许消失。
+                     */
+                    if (
+                        this.pauseMenuOpen
+                    ) {
+
+                        this.hidePauseMenu();
+
+
+                        gameEvents.emit(
+                            "ui:resume-request"
+                        );
+                    }
+
+
+                    return;
+                }
+
+
+                // ============================================
+                // Pointer Lock lost
+                // ============================================
+
+                /*
+                 * Buy / BOT / Radio 菜单主动释放鼠标，
+                 * 这是正常行为，不弹 Pause Menu。
+                 */
+                if (
+                    this.buyMenuOpen ||
+                    this.botMenuOpen ||
+                    radio.menuOpen
+                ) {
+
+                    return;
+                }
+
+
+                /*
+                 * 游戏尚未开始：
+                 * 显示 Main Menu。
+                 */
+                if (
+                    !this.gameplayStarted
+                ) {
 
                     this.showStartOverlay();
+
+                    return;
+                }
+
+
+                /*
+                 * 游戏已经开始，而 Pointer Lock 突然丢失：
+                 * 通常就是玩家按了浏览器 ESC。
+                 *
+                 * 第一时间打开 Pause Menu，
+                 * 不再依赖 ESC keydown 是否能被页面收到。
+                 */
+                if (
+                    !this.pauseMenuOpen
+                ) {
+
+                    this.openPauseMenu({
+                        releasePointer:
+                            false
+                    });
                 }
             };
-
 
         this.handlers.buySuccess =
             data => {
@@ -410,6 +535,28 @@ export class UISystem {
                     returnToGame:
                         true
                 });
+            };
+
+
+        this.handlers.gameplayStarted =
+            () => {
+
+                this.gameplayStarted =
+                    true;
+
+                this.hideStartOverlay();
+            };
+
+
+        this.handlers.returnedToMenu =
+            () => {
+
+                this.gameplayStarted =
+                    false;
+
+                this.hidePauseMenu();
+
+                this.showStartOverlay();
             };
 
 
@@ -546,6 +693,52 @@ export class UISystem {
             );
 
 
+        this.elements.pauseResume
+            ?.addEventListener(
+                "click",
+                () => {
+
+                    this.resumeFromPause();
+                }
+            );
+
+
+        this.elements.pauseRestartRound
+            ?.addEventListener(
+                "click",
+                () => {
+
+                    gameEvents.emit(
+                        "ui:restart-round-request"
+                    );
+                }
+            );
+
+
+        this.elements.pauseRestartMatch
+            ?.addEventListener(
+                "click",
+                () => {
+
+                    gameEvents.emit(
+                        "ui:restart-match-request"
+                    );
+                }
+            );
+
+
+        this.elements.pauseMainMenu
+            ?.addEventListener(
+                "click",
+                () => {
+
+                    gameEvents.emit(
+                        "ui:main-menu-request"
+                    );
+                }
+            );
+
+
         document.addEventListener(
             "pointerlockchange",
             this.handlers.pointerLock
@@ -580,6 +773,18 @@ export class UISystem {
         gameEvents.on(
             "economy:buy-time-ended",
             this.handlers.buyTimeEnded
+        );
+
+
+        gameEvents.on(
+            "game:gameplay-started",
+            this.handlers.gameplayStarted
+        );
+
+
+        gameEvents.on(
+            "game:returned-to-menu",
+            this.handlers.returnedToMenu
         );
 
 
@@ -725,7 +930,61 @@ export class UISystem {
 				radio.menuOpen
 			) {
 
-				this.closeAllMenus();
+				/*
+				 * ESC 先关闭当前菜单。
+				 *
+				 * 然后尝试恢复 Pointer Lock。
+				 * 如果 Chrome 因 ESC 安全策略拒绝，
+				 * requestGameFocusWithFallback()
+				 * 会自动显示 Pause Menu，
+				 * 不会留下“无菜单 + 无法控制”的死状态。
+				 */
+				this.closeAllMenus({
+					returnToGame:
+						false
+				});
+
+
+				this.requestGameFocusWithFallback();
+
+
+				return true;
+			}
+
+
+			if (
+				this.pauseMenuOpen
+			) {
+
+				/*
+				 * ESC 可以尝试 Resume，
+				 * 但 Pause Menu 不会立即隐藏。
+				 *
+				 * 只有 pointerlockchange 确认锁定成功，
+				 * Pause Menu 才真正消失。
+				 */
+				this.resumeFromPause();
+
+				return true;
+			}
+
+
+			/*
+			 * Pointer Lock 状态下的第一次 ESC
+			 * 很可能被浏览器优先消费。
+			 *
+			 * 真正的 Pause 打开由 pointerlockchange
+			 * 负责，这里只作为 fallback。
+			 */
+			if (
+				this.gameplayStarted &&
+				!document.pointerLockElement
+			) {
+
+				this.openPauseMenu({
+					releasePointer:
+						false
+				});
 
 				return true;
 			}
@@ -920,6 +1179,195 @@ export class UISystem {
                 .textContent =
                 text || "";
         }
+    }
+
+
+    // ========================================================
+    // Pause Menu V2
+    // ========================================================
+
+    openPauseMenu({
+        releasePointer = true
+    } = {}) {
+
+        if (
+            !this.gameplayStarted ||
+            this.pauseMenuOpen
+        ) {
+
+            return false;
+        }
+
+
+        this.closeAllMenus({
+            returnToGame:
+                false
+        });
+
+
+        this.pauseMenuOpen =
+            true;
+
+
+        this.pointerLockResumePending =
+            false;
+
+
+        if (
+            this.elements.pauseOverlay
+        ) {
+
+            this.elements
+                .pauseOverlay
+                .style.display =
+                "flex";
+        }
+
+
+        this.hideStartOverlay();
+
+
+        gameEvents.emit(
+            "ui:pause-request"
+        );
+
+
+        if (
+            releasePointer &&
+            document.pointerLockElement
+        ) {
+
+            document.exitPointerLock?.();
+        }
+
+
+        return true;
+    }
+
+
+    hidePauseMenu() {
+
+        this.pauseMenuOpen =
+            false;
+
+
+        this.pointerLockResumePending =
+            false;
+
+
+        if (
+            this.elements.pauseOverlay
+        ) {
+
+            this.elements
+                .pauseOverlay
+                .style.display =
+                "none";
+        }
+    }
+
+
+    resumeFromPause() {
+
+        if (
+            !this.pauseMenuOpen
+        ) {
+
+            return false;
+        }
+
+
+        /*
+         * 重要：
+         *
+         * 不要先 hidePauseMenu()。
+         *
+         * Chrome 有可能拒绝由 ESC 触发的
+         * requestPointerLock()。
+         *
+         * 菜单保持显示，
+         * 等 pointerlockchange 真正确认锁定成功后
+         * 再自动隐藏。
+         */
+        this.pointerLockResumePending =
+            true;
+
+
+        this.requestGameFocus();
+
+
+        return true;
+    }
+
+
+    // ========================================================
+    // Pointer Lock Recovery
+    // ========================================================
+
+    requestGameFocusWithFallback() {
+
+        if (
+            !this.gameplayStarted ||
+            !this.player?.isAlive
+        ) {
+
+            return false;
+        }
+
+
+        this.pointerLockResumePending =
+            true;
+
+
+        this.requestGameFocus();
+
+
+        /*
+         * ESC 触发 requestPointerLock()
+         * 某些 Chrome 版本会直接拒绝，
+         * 而且不一定抛出异常。
+         *
+         * 稍后检查真实状态。
+         */
+        window.setTimeout(
+            () => {
+
+                if (
+                    document.pointerLockElement
+                ) {
+
+                    this.pointerLockResumePending =
+                        false;
+
+                    return;
+                }
+
+
+                this.pointerLockResumePending =
+                    false;
+
+
+                /*
+                 * 没锁成功就显示 Pause Menu，
+                 * 让玩家点击 RESUME GAME。
+                 */
+                if (
+                    this.gameplayStarted &&
+                    !this.pauseMenuOpen
+                ) {
+
+                    this.openPauseMenu({
+                        releasePointer:
+                            false
+                    });
+                }
+
+            },
+            120
+        );
+
+
+        return true;
     }
 
 
@@ -1679,6 +2127,7 @@ export class UISystem {
         return (
             this.buyMenuOpen ||
             this.botMenuOpen ||
+            this.pauseMenuOpen ||
             radio.menuOpen
         );
     }
@@ -1701,10 +2150,20 @@ export class UISystem {
 
     requestGameFocus() {
 
+        /*
+         * Buy / BOT / Radio 菜单打开时不能锁鼠标。
+         *
+         * Pause Menu 是例外：
+         * RESUME GAME 本身就需要在 Pause Menu
+         * 仍显示时请求 Pointer Lock。
+         */
         if (
-            this.anyMenuOpen
+            this.buyMenuOpen ||
+            this.botMenuOpen ||
+            radio.menuOpen
         ) {
-            return;
+
+            return false;
         }
 
 
@@ -1722,6 +2181,9 @@ export class UISystem {
                 .requestPointerLock
                 ?.();
         }
+
+
+        return true;
     }
 
 
@@ -1832,6 +2294,18 @@ export class UISystem {
         gameEvents.off(
             "economy:buy-time-ended",
             this.handlers.buyTimeEnded
+        );
+
+
+        gameEvents.off(
+            "game:gameplay-started",
+            this.handlers.gameplayStarted
+        );
+
+
+        gameEvents.off(
+            "game:returned-to-menu",
+            this.handlers.returnedToMenu
         );
 
 

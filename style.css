@@ -2003,3 +2003,499 @@ body {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* ==========================================================
+   PAUSE MENU V2
+   ========================================================== */
+
+.pause-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background:
+        radial-gradient(
+            circle at center,
+            rgba(24, 30, 20, 0.72),
+            rgba(0, 0, 0, 0.90)
+        );
+
+    backdrop-filter: blur(4px);
+}
+
+.pause-panel {
+    width: min(390px, calc(100vw - 36px));
+    padding: 30px 28px 24px;
+
+    border: 2px solid rgba(214, 199, 94, 0.72);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(24, 29, 20, 0.98),
+            rgba(8, 10, 7, 0.99)
+        );
+
+    box-shadow:
+        0 14px 48px rgba(0, 0, 0, 0.92),
+        inset 0 0 24px rgba(190, 180, 80, 0.06);
+
+    text-align: center;
+}
+
+.pause-title {
+    color: #e8dc68;
+    font-size: 30px;
+    font-weight: bold;
+    letter-spacing: 5px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.pause-subtitle {
+    margin-top: 5px;
+    margin-bottom: 24px;
+
+    color: #858d7a;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+
+.pause-menu-button {
+    display: block;
+    width: 100%;
+
+    margin-top: 9px;
+    padding: 12px 14px;
+
+    border: 1px solid rgba(200, 190, 100, 0.30);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(54, 61, 39, 0.92),
+            rgba(29, 34, 22, 0.96)
+        );
+
+    color: #d5dac8;
+
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1.4px;
+
+    cursor: pointer;
+}
+
+.pause-menu-button:hover {
+    border-color: rgba(230, 216, 105, 0.78);
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(79, 89, 51, 0.96),
+            rgba(41, 48, 29, 0.98)
+        );
+
+    color: #fff3a0;
+}
+
+.pause-menu-primary {
+    border-color: rgba(111, 205, 255, 0.58);
+    color: #8ed8ff;
+}
+
+.pause-menu-primary:hover {
+    border-color: #65cfff;
+    color: #fff;
+    background: rgba(18, 76, 108, 0.92);
+}
+
+.pause-menu-danger {
+    margin-top: 18px;
+    border-color: rgba(255, 100, 82, 0.42);
+    color: #ff9184;
+}
+
+.pause-menu-danger:hover {
+    border-color: #ff6658;
+    color: #fff;
+    background: rgba(112, 35, 28, 0.94);
+}
+
+.pause-hint {
+    margin-top: 18px;
+
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+    letter-spacing: 1.4px;
+}
+
+
+/* ==========================================================
+   COMBAT FEEDBACK V2
+   ========================================================== */
+
+.combat-feedback {
+    position: fixed;
+
+    left: 50%;
+    top: calc(50% + 45px);
+
+    z-index: 180;
+
+    transform:
+        translate(-50%, 8px)
+        scale(0.94);
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    color: #ffffff;
+
+    font-family:
+        "Courier New",
+        Consolas,
+        monospace;
+
+    font-size: 13px;
+    font-weight: bold;
+
+    letter-spacing: 2px;
+
+    text-shadow:
+        0 1px 2px #000,
+        0 0 8px
+        rgba(255, 255, 255, 0.30);
+
+    transition:
+        opacity 0.08s ease-out,
+        transform 0.10s ease-out;
+}
+
+
+.combat-feedback[data-type="headshot"] {
+    color: #ffd84d;
+
+    text-shadow:
+        0 1px 2px #000,
+        0 0 9px
+        rgba(255, 190, 35, 0.75);
+}
+
+
+.combat-feedback[data-type="kill"] {
+    color: #ff5555;
+
+    font-size: 14px;
+
+    text-shadow:
+        0 1px 2px #000,
+        0 0 10px
+        rgba(255, 55, 55, 0.75);
+}
+
+
+.combat-feedback[data-type="headshot-kill"] {
+    color: #ffbd3b;
+
+    font-size: 15px;
+
+    text-shadow:
+        0 1px 2px #000,
+        0 0 12px
+        rgba(255, 130, 20, 0.85);
+}
+
+
+.combat-feedback.combat-feedback-show {
+    opacity: 1;
+
+    transform:
+        translate(-50%, 0)
+        scale(1);
+}
+
+
+/* ----------------------------------------------------------
+   Kill Feed V2
+   ---------------------------------------------------------- */
+
+.kill-feed-entry {
+    border-right:
+        1px solid
+        rgba(255, 255, 255, 0.05);
+}
+
+
+.kill-feed-entry-player-kill {
+    border-left-color:
+        rgba(244, 222, 84, 0.95);
+
+    background:
+        rgba(52, 50, 22, 0.78);
+
+    box-shadow:
+        0 1px 6px
+        rgba(0, 0, 0, 0.60),
+        0 0 9px
+        rgba(215, 195, 60, 0.08);
+}
+
+
+.kill-feed-entry-player-death {
+    border-left-color:
+        rgba(255, 80, 70, 0.82);
+}
+
+
+.kill-feed-entry-headshot {
+    background:
+        linear-gradient(
+            90deg,
+            rgba(68, 55, 15, 0.72),
+            rgba(0, 0, 0, 0.58)
+        );
+}
+
+
+.kill-feed-name {
+    font-weight: bold;
+}
+
+
+.kill-feed-headshot {
+    margin:
+        0 7px 0 2px;
+
+    padding:
+        1px 4px;
+
+    border:
+        1px solid
+        rgba(255, 190, 40, 0.55);
+
+    color:
+        #ffc845;
+
+    background:
+        rgba(105, 66, 5, 0.42);
+
+    font-size:
+        9px;
+
+    font-weight:
+        bold;
+
+    letter-spacing:
+        0.4px;
+
+    text-shadow:
+        0 0 4px
+        rgba(255, 155, 20, 0.75);
+}
+
+/* ==========================================================
+   CROUCH + ACCURACY CROSSHAIR V1
+   ========================================================== */
+
+/*
+ * 准心变化与真实 spread 同步：
+ *
+ * Stand:
+ *   默认间距
+ *
+ * Ctrl / Crouch:
+ *   四条线向中心收紧
+ *
+ * CSS 只负责视觉反馈。
+ * 实际精度由 weapon.js 的 crouch spread 控制。
+ */
+
+.crosshair-line {
+    transition:
+        top 0.12s ease-out,
+        bottom 0.12s ease-out,
+        left 0.12s ease-out,
+        right 0.12s ease-out,
+        width 0.12s ease-out,
+        height 0.12s ease-out,
+        opacity 0.12s ease-out;
+}
+
+
+/* ----------------------------------------------------------
+   Crouched Crosshair
+   ---------------------------------------------------------- */
+
+.crosshair.crosshair-crouched
+.crosshair-top {
+    top: 4px;
+    height: 6px;
+}
+
+
+.crosshair.crosshair-crouched
+.crosshair-bottom {
+    bottom: 4px;
+    height: 6px;
+}
+
+
+.crosshair.crosshair-crouched
+.crosshair-left {
+    left: 4px;
+    width: 6px;
+}
+
+
+.crosshair.crosshair-crouched
+.crosshair-right {
+    right: 4px;
+    width: 6px;
+}
+
+
+/*
+ * 下蹲时略微提高视觉清晰度，
+ * 让玩家直观看到“当前处于高精度姿态”。
+ */
+.crosshair.crosshair-crouched
+.crosshair-line {
+    opacity: 1;
+}
+
+
+
+/* ==========================================================
+   DYNAMIC CROSSHAIR V2
+   ========================================================== */
+
+.crosshair {
+    /*
+     * hud.js 每帧更新这个变量。
+     * 默认值保证页面刚加载时也有正常准心。
+     */
+    --crosshair-gap: 3px;
+    --crosshair-line-length: 7px;
+}
+
+
+/*
+ * 28x28 容器中心是 14px。
+ * 每条线根据 --crosshair-gap 从中心向外展开。
+ */
+
+.crosshair-top {
+    width: 2px;
+    height: var(--crosshair-line-length);
+
+    left: 13px;
+
+    top:
+        calc(
+            14px -
+            var(--crosshair-gap) -
+            var(--crosshair-line-length)
+        );
+}
+
+
+.crosshair-bottom {
+    width: 2px;
+    height: var(--crosshair-line-length);
+
+    left: 13px;
+
+    bottom:
+        calc(
+            14px -
+            var(--crosshair-gap) -
+            var(--crosshair-line-length)
+        );
+}
+
+
+.crosshair-left {
+    width: var(--crosshair-line-length);
+    height: 2px;
+
+    top: 13px;
+
+    left:
+        calc(
+            14px -
+            var(--crosshair-gap) -
+            var(--crosshair-line-length)
+        );
+}
+
+
+.crosshair-right {
+    width: var(--crosshair-line-length);
+    height: 2px;
+
+    top: 13px;
+
+    right:
+        calc(
+            14px -
+            var(--crosshair-gap) -
+            var(--crosshair-line-length)
+        );
+}
+
+
+/*
+ * 旧 Crouch V1 的固定 4px 偏移需要覆盖掉，
+ * 否则会和动态 gap 打架。
+ */
+.crosshair.crosshair-crouched
+.crosshair-top,
+.crosshair.crosshair-crouched
+.crosshair-bottom,
+.crosshair.crosshair-crouched
+.crosshair-left,
+.crosshair.crosshair-crouched
+.crosshair-right {
+    width: unset;
+    height: unset;
+}
+
+
+.crosshair.crosshair-crouched
+.crosshair-top,
+.crosshair.crosshair-crouched
+.crosshair-bottom {
+    width: 2px;
+    height: var(--crosshair-line-length);
+}
+
+
+.crosshair.crosshair-crouched
+.crosshair-left,
+.crosshair.crosshair-crouched
+.crosshair-right {
+    width: var(--crosshair-line-length);
+    height: 2px;
+}
+
+
+/* 状态辅助：跳跃时略降透明度，强调不稳定。 */
+.crosshair[data-dynamic-state="air"]
+.crosshair-line {
+    opacity: 0.82;
+}
+
+
+/* 静步 / 蹲下时保持清晰。 */
+.crosshair[data-dynamic-state="walk"]
+.crosshair-line,
+.crosshair[data-dynamic-state="crouch"]
+.crosshair-line {
+    opacity: 1;
+}
