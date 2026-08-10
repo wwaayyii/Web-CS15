@@ -363,8 +363,40 @@ export class WeaponView {
         this.reloadTime =
             0;
 
+
         this.reloadDuration =
             1;
+
+
+        // Reload Animation V2
+        this.reloadMagazine =
+            null;
+
+        this.reloadEjectedMagazine =
+            null;
+
+        this.reloadMagazineBasePosition =
+            new THREE.Vector3();
+
+        this.reloadMagazineBaseRotation =
+            new THREE.Euler();
+
+        this.reloadMagazineBaseScale =
+            new THREE.Vector3(
+                1,
+                1,
+                1
+            );
+
+
+        // Reload Sound V2 stage guards
+        this.reloadSoundStages =
+            {
+                magRelease: false,
+                magOut: false,
+                magIn: false,
+                action: false
+            };
 
 
         this.drawTime =
@@ -572,6 +604,13 @@ export class WeaponView {
                 }
 
 
+                this.resetReloadMagazine();
+
+                this.clearReloadEjectedMagazine();
+
+                this.reloadMagazine =
+                    null;
+
                 this.state =
                     WEAPON_VIEW_STATE.IDLE;
 
@@ -686,6 +725,12 @@ export class WeaponView {
 
             return;
         }
+
+
+        this.clearReloadEjectedMagazine();
+
+        this.reloadMagazine =
+            null;
 
 
         this.currentWeapon =
@@ -1043,6 +1088,32 @@ export class WeaponView {
         );
 
 
+        // detachable magazine (Reload Animation V2)
+        const magazine =
+            createBox(
+                new THREE.Vector3(
+                    0.085,
+                    0.23,
+                    0.10
+                ),
+                mat.black,
+                new THREE.Vector3(
+                    0,
+                    -0.28,
+                    0.02
+                )
+            );
+
+        magazine.name =
+            "WEAPON_MAGAZINE";
+
+        magazine.userData.weaponMagazine =
+            true;
+
+        group.add(
+            magazine
+        );
+
         return group;
     }
 
@@ -1119,6 +1190,32 @@ export class WeaponView {
             grip
         );
 
+
+        // detachable magazine (Reload Animation V2)
+        const magazine =
+            createBox(
+                new THREE.Vector3(
+                    0.085,
+                    0.23,
+                    0.10
+                ),
+                mat.black,
+                new THREE.Vector3(
+                    0,
+                    -0.28,
+                    0.02
+                )
+            );
+
+        magazine.name =
+            "WEAPON_MAGAZINE";
+
+        magazine.userData.weaponMagazine =
+            true;
+
+        group.add(
+            magazine
+        );
 
         return group;
     }
@@ -1345,6 +1442,12 @@ export class WeaponView {
         mag.rotation.x =
             0.18;
 
+        mag.name =
+            "WEAPON_MAGAZINE";
+
+        mag.userData.weaponMagazine =
+            true;
+
 
         group.add(
             mag
@@ -1525,8 +1628,8 @@ export class WeaponView {
         );
 
 
-        // mag
-        group.add(
+        // magazine
+        const mag =
             createBox(
                 new THREE.Vector3(
                     0.12,
@@ -1539,7 +1642,16 @@ export class WeaponView {
                     -0.29,
                     -0.20
                 )
-            )
+            );
+
+        mag.name =
+            "WEAPON_MAGAZINE";
+
+        mag.userData.weaponMagazine =
+            true;
+
+        group.add(
+            mag
         );
 
 
@@ -1657,6 +1769,12 @@ export class WeaponView {
 
         mag.rotation.x =
             0.08;
+
+        mag.name =
+            "WEAPON_MAGAZINE";
+
+        mag.userData.weaponMagazine =
+            true;
 
 
         group.add(
@@ -3304,11 +3422,245 @@ export class WeaponView {
     // Reload
     // ========================================================
 
+    getReloadProfile(
+        weaponId =
+            this.currentWeaponId
+    ) {
+
+        switch (weaponId) {
+
+            case "deagle":
+            case "glock":
+            case "usp":
+                return {
+                    drop: 0.28,
+                    side: 0.08,
+                    roll: 0.42,
+                    pitch: 0.18,
+                    magDrop: 0.34,
+                    magSide: 0.025
+                };
+
+            case "awp":
+            case "scout":
+                return {
+                    drop: 0.24,
+                    side: 0.13,
+                    roll: 0.34,
+                    pitch: 0.24,
+                    magDrop: 0.22,
+                    magSide: 0.02
+                };
+
+            case "mp5":
+                return {
+                    drop: 0.27,
+                    side: 0.10,
+                    roll: 0.48,
+                    pitch: 0.17,
+                    magDrop: 0.38,
+                    magSide: 0.03
+                };
+
+            default:
+                return {
+                    drop: 0.30,
+                    side: 0.11,
+                    roll: 0.52,
+                    pitch: 0.20,
+                    magDrop: 0.40,
+                    magSide: 0.035
+                };
+        }
+    }
+
+
+    findReloadMagazine() {
+
+        let magazine =
+            null;
+
+        this.currentModel
+            ?.traverse(
+                object => {
+
+                    if (
+                        !magazine &&
+                        object.userData
+                            ?.weaponMagazine
+                    ) {
+                        magazine =
+                            object;
+                    }
+                }
+            );
+
+        return magazine;
+    }
+
+
+    resetReloadMagazine() {
+
+        if (
+            !this.reloadMagazine
+        ) {
+            return;
+        }
+
+        this.reloadMagazine.position
+            .copy(
+                this.reloadMagazineBasePosition
+            );
+
+        this.reloadMagazine.rotation
+            .copy(
+                this.reloadMagazineBaseRotation
+            );
+
+        this.reloadMagazine.scale
+            .copy(
+                this.reloadMagazineBaseScale
+            );
+
+        this.reloadMagazine.visible =
+            true;
+    }
+
+
+    clearReloadEjectedMagazine() {
+
+        if (
+            !this.reloadEjectedMagazine
+        ) {
+            return;
+        }
+
+
+        if (
+            this.reloadEjectedMagazine.parent
+        ) {
+
+            this.reloadEjectedMagazine.parent.remove(
+                this.reloadEjectedMagazine
+            );
+        }
+
+
+        this.reloadEjectedMagazine =
+            null;
+    }
+
+
+    createReloadEjectedMagazine() {
+
+        this.clearReloadEjectedMagazine();
+
+
+        if (
+            !this.reloadMagazine
+        ) {
+            return;
+        }
+
+
+        const clone =
+            this.reloadMagazine.clone(
+                true
+            );
+
+
+        clone.name =
+            "RELOAD_EJECTED_MAGAZINE";
+
+
+        /*
+         * Clone 与原弹匣共享 Geometry/Material。
+         * 只作为短暂动画对象，不单独 dispose 共享资源。
+         */
+        clone.position
+            .copy(
+                this.reloadMagazine.position
+            );
+
+
+        clone.rotation
+            .copy(
+                this.reloadMagazine.rotation
+            );
+
+
+        clone.scale
+            .copy(
+                this.reloadMagazine.scale
+            );
+
+
+        /*
+         * 放到 currentModel 中，保持和枪械相同的局部坐标，
+         * 但它从此与原弹匣是两个独立对象。
+         */
+        this.currentModel.add(
+            clone
+        );
+
+
+        this.reloadEjectedMagazine =
+            clone;
+    }
+
+
+    emitReloadSoundStage(
+        stage
+    ) {
+
+        console.log(
+            "[ReloadDebug][WeaponView] emit stage:",
+            stage,
+            "weapon=",
+            this.currentWeaponId,
+            "t=",
+            (
+                this.reloadTime /
+                Math.max(
+                    0.001,
+                    this.reloadDuration
+                )
+            ).toFixed(
+                3
+            )
+        );
+
+
+        gameEvents.emit(
+            "weapon:reload-stage",
+            {
+                owner:
+                    this.player,
+
+                weapon:
+                    this.currentWeapon,
+
+                weaponId:
+                    this.currentWeaponId,
+
+                stage
+            }
+        );
+    }
+
+
     onReload(weapon) {
 
         if (!weapon) {
             return;
         }
+
+        console.log(
+            "[ReloadDebug][WeaponView] onReload:",
+            weapon.id,
+            "duration=",
+            weapon.config?.reloadTime
+        );
 
 
         this.state =
@@ -3320,6 +3672,24 @@ export class WeaponView {
         this.reloadTime =
             0;
 
+
+        /*
+         * Reload Sound V2
+         * 每一次新的换弹动作都重新允许各阶段声音触发。
+         */
+        this.reloadSoundStages.magRelease =
+            false;
+
+        this.reloadSoundStages.magOut =
+            false;
+
+        this.reloadSoundStages.magIn =
+            false;
+
+        this.reloadSoundStages.action =
+            false;
+
+
         this.reloadDuration =
             Math.max(
                 0.4,
@@ -3327,6 +3697,34 @@ export class WeaponView {
                     ?.reloadTime ??
                 2
             );
+
+
+        this.reloadMagazine =
+            this.findReloadMagazine();
+
+
+        if (
+            this.reloadMagazine
+        ) {
+
+            this.reloadMagazineBasePosition
+                .copy(
+                    this.reloadMagazine.position
+                );
+
+            this.reloadMagazineBaseRotation
+                .copy(
+                    this.reloadMagazine.rotation
+                );
+
+            this.reloadMagazineBaseScale
+                .copy(
+                    this.reloadMagazine.scale
+                );
+
+
+            this.createReloadEjectedMagazine();
+        }
     }
 
 
@@ -3482,36 +3880,328 @@ export class WeaponView {
             );
 
 
-        const wave =
-            Math.sin(
-                t *
-                Math.PI
+        const profile =
+            this.getReloadProfile();
+
+
+        // ----------------------------------------------------
+        // Reload Sound V2
+        // ----------------------------------------------------
+
+        if (
+            t >= 0.18 &&
+            !this.reloadSoundStages.magRelease
+        ) {
+
+            this.reloadSoundStages.magRelease =
+                true;
+
+            this.emitReloadSoundStage(
+                "mag-release"
             );
-
-
-        this.weaponRoot.position.y -=
-            wave *
-            0.28;
-
-
-        this.weaponRoot.position.x +=
-            wave *
-            0.10;
-
-
-        this.weaponRoot.rotation.z +=
-            wave *
-            0.55;
-
-
-        this.weaponRoot.rotation.x +=
-            wave *
-            0.18;
+        }
 
 
         if (
-            t >= 1
+            t >= 0.46 &&
+            !this.reloadSoundStages.magOut
         ) {
+
+            this.reloadSoundStages.magOut =
+                true;
+
+            this.emitReloadSoundStage(
+                "mag-out"
+            );
+        }
+
+
+        if (
+            t >= 0.54 &&
+            !this.reloadSoundStages.magIn
+        ) {
+
+            this.reloadSoundStages.magIn =
+                true;
+
+            this.emitReloadSoundStage(
+                "mag-in"
+            );
+        }
+
+
+        if (
+            t >= 0.90 &&
+            !this.reloadSoundStages.action
+        ) {
+
+            this.reloadSoundStages.action =
+                true;
+
+            this.emitReloadSoundStage(
+                "action"
+            );
+        }
+
+
+        /*
+         * Reload Animation V2.1
+         *
+         * 0.00 - 0.18 : 枪身压低并转向
+         * 0.18 - 0.46 : 旧弹匣明显退出
+         * 0.46 - 0.54 : 换新弹匣
+         * 0.54 - 0.78 : 新弹匣从下方插入
+         * 0.78 - 1.00 : 枪身回到 ready
+         */
+        let pose =
+            0;
+
+
+        if (
+            t <
+            0.18
+        ) {
+
+            pose =
+                smoothstep(
+                    t /
+                    0.18
+                );
+
+        } else if (
+            t <
+            0.78
+        ) {
+
+            pose =
+                1;
+
+        } else {
+
+            pose =
+                1 -
+                smoothstep(
+                    (
+                        t -
+                        0.78
+                    ) /
+                    0.22
+                );
+        }
+
+
+        this.weaponRoot.position.y -=
+            pose *
+            profile.drop;
+
+
+        this.weaponRoot.position.x +=
+            pose *
+            profile.side;
+
+
+        this.weaponRoot.rotation.z +=
+            pose *
+            profile.roll;
+
+
+        this.weaponRoot.rotation.x +=
+            pose *
+            profile.pitch;
+
+
+        // ----------------------------------------------------
+        // Original magazine = 新弹匣
+        // ----------------------------------------------------
+
+        if (
+            this.reloadMagazine
+        ) {
+
+            this.resetReloadMagazine();
+
+
+            /*
+             * 旧弹匣退出期间，把枪上的原弹匣隐藏。
+             */
+            if (
+                t >=
+                    0.18 &&
+                t <
+                    0.54
+            ) {
+
+                this.reloadMagazine.visible =
+                    false;
+
+            } else if (
+                t >=
+                    0.54 &&
+                t <
+                    0.78
+            ) {
+
+                this.reloadMagazine.visible =
+                    true;
+
+
+                const insertT =
+                    smoothstep(
+                        (
+                            t -
+                            0.54
+                        ) /
+                        0.24
+                    );
+
+
+                /*
+                 * 新弹匣从明显低于枪身的位置插入。
+                 */
+                const insertOffset =
+                    1 -
+                    insertT;
+
+
+                this.reloadMagazine.position.y -=
+                    insertOffset *
+                    (
+                        profile.magDrop +
+                        0.16
+                    );
+
+
+                this.reloadMagazine.position.x +=
+                    insertOffset *
+                    (
+                        profile.magSide +
+                        0.055
+                    );
+
+
+                this.reloadMagazine.position.z +=
+                    insertOffset *
+                    0.045;
+
+
+                this.reloadMagazine.rotation.z +=
+                    insertOffset *
+                    0.16;
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // Ejected magazine = 旧弹匣
+        // ----------------------------------------------------
+
+        if (
+            this.reloadEjectedMagazine
+        ) {
+
+            if (
+                t <
+                0.18
+            ) {
+
+                this.reloadEjectedMagazine.visible =
+                    false;
+
+            } else {
+
+                this.reloadEjectedMagazine.visible =
+                    true;
+
+
+                const ejectT =
+                    clamp01(
+                        (
+                            t -
+                            0.18
+                        ) /
+                        0.30
+                    );
+
+
+                const eased =
+                    smoothstep(
+                        ejectT
+                    );
+
+
+                this.reloadEjectedMagazine.position
+                    .copy(
+                        this.reloadMagazineBasePosition
+                    );
+
+
+                this.reloadEjectedMagazine.rotation
+                    .copy(
+                        this.reloadMagazineBaseRotation
+                    );
+
+
+                /*
+                 * 明显向下 + 向外掉落。
+                 */
+                this.reloadEjectedMagazine.position.y -=
+                    eased *
+                    (
+                        profile.magDrop +
+                        0.26
+                    );
+
+
+                this.reloadEjectedMagazine.position.x +=
+                    eased *
+                    (
+                        profile.magSide +
+                        0.10
+                    );
+
+
+                this.reloadEjectedMagazine.position.z +=
+                    eased *
+                    0.08;
+
+
+                this.reloadEjectedMagazine.rotation.x +=
+                    eased *
+                    0.28;
+
+
+                this.reloadEjectedMagazine.rotation.z +=
+                    eased *
+                    0.34;
+
+
+                /*
+                 * 旧弹匣掉出视野后直接隐藏，
+                 * 防止后半段和新弹匣重叠。
+                 */
+                if (
+                    t >
+                    0.56
+                ) {
+
+                    this.reloadEjectedMagazine.visible =
+                        false;
+                }
+            }
+        }
+
+
+        if (
+            t >=
+            1
+        ) {
+
+            this.resetReloadMagazine();
+
+            this.clearReloadEjectedMagazine();
+
+            this.reloadMagazine =
+                null;
 
             this.state =
                 WEAPON_VIEW_STATE.IDLE;
@@ -3843,58 +4533,6 @@ export class WeaponView {
     // Flash update
     // ========================================================
 
-    updateMuzzleFlash(
-        delta
-    ) {
-
-        if (
-            this.muzzleFlashTime <=
-            0
-        ) {
-
-            if (
-                this.muzzleFlash
-            ) {
-
-                this.muzzleFlash.material.opacity =
-                    0;
-            }
-
-
-            if (
-                this.muzzleLight
-            ) {
-
-                this.muzzleLight.intensity =
-                    0;
-            }
-
-
-            return;
-        }
-
-
-        this.muzzleFlashTime -=
-            delta;
-
-
-        const t =
-            clamp01(
-                this.muzzleFlashTime /
-                0.055
-            );
-
-
-        this.muzzleFlash.material.opacity =
-            t;
-
-
-        this.muzzleLight.intensity =
-            2.5 *
-            t;
-    }
-
-
     // ========================================================
     // Update
     // ========================================================
@@ -4144,6 +4782,12 @@ export class WeaponView {
 
 
         this.muzzleSmokeMaterial =
+            null;
+
+
+        this.clearReloadEjectedMagazine();
+
+        this.reloadMagazine =
             null;
 
 

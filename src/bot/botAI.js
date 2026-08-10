@@ -300,6 +300,44 @@ export class BotAI {
 
 
         // ====================================================
+        // Combat V2
+        //
+        // - 持续横移，不再每帧随机“走/停”
+        // - 低血量寻找掩体
+        // - 掩体停留有时间限制，不会永久躲藏
+        // - 换弹时尽量向附近掩体移动
+        // ====================================================
+
+        this.combatMoveActive =
+            true;
+
+        this.combatMoveTimer =
+            randomRange(
+                0.55,
+                1.05
+            );
+
+
+        this.coverTarget =
+            null;
+
+        this.coverHoldTimer =
+            0;
+
+        this.coverSearchCooldown =
+            0;
+
+        this.retreatCooldown =
+            0;
+
+        this.retreatMaxTimer =
+            0;
+
+        this.reloadCoverTarget =
+            null;
+
+
+        // ====================================================
         // Aim
         // ====================================================
 
@@ -1042,6 +1080,22 @@ export class BotAI {
             Math.max(
                 0,
                 this.holdPositionTimer -
+                delta
+            );
+
+
+        this.coverSearchCooldown =
+            Math.max(
+                0,
+                this.coverSearchCooldown -
+                delta
+            );
+
+
+        this.retreatCooldown =
+            Math.max(
+                0,
+                this.retreatCooldown -
                 delta
             );
 
@@ -2620,20 +2674,84 @@ export class BotAI {
             );
 
 
+        // ----------------------------------------------------
+        // Combat V2 - Movement Phase
+        //
+        // 旧版每帧随机一次是否横移，会产生：
+        // 走一点 -> 停 -> 停 -> 再走一点。
+        //
+        // 现在一次决定保持 0.45~1.15 秒，
+        // 形成更自然的连续横移 / 短暂停枪节奏。
+        // ----------------------------------------------------
+
+        this.combatMoveTimer -=
+            delta;
+
+
         if (
-            chance(
-                BOT_CONFIG
-                    .combat
-                    .strafeChance *
-                delta *
-                3
-            )
+            this.combatMoveTimer <=
+            0
+        ) {
+
+            const strafeChance =
+                clamp(
+                    BOT_CONFIG
+                        .combat
+                        .strafeChance ??
+                    0.65,
+                    0.25,
+                    0.92
+                );
+
+
+            this.combatMoveActive =
+                chance(
+                    strafeChance
+                );
+
+
+            if (
+                this.combatMoveActive
+            ) {
+
+                if (
+                    chance(
+                        0.62
+                    )
+                ) {
+
+                    this.strafeDirection *=
+                        -1;
+                }
+
+
+                this.combatMoveTimer =
+                    randomRange(
+                        0.55,
+                        1.15
+                    );
+
+            } else {
+
+                this.combatMoveTimer =
+                    randomRange(
+                        0.18,
+                        0.42
+                    );
+            }
+        }
+
+
+        if (
+            this.combatMoveActive
         ) {
 
             this.moveSmart(
                 strafe,
                 delta,
-                BOT_CONFIG.normalSpeed
+                this.getDifficultyMovementSpeed(
+                    BOT_CONFIG.normalSpeed
+                )
             );
 
         } else {
@@ -4487,7 +4605,495 @@ export class BotAI {
 
 
     // ========================================================
-    // Reload
+    // Combat V2 - Cover Helpers
+    // ========================================================
+
+    isPositionCoveredFromEnemy(
+        position,
+        enemyPosition
+    ) {
+
+        if (
+            !position ||
+            !enemyPosition ||
+            !this.collisionObjects ||
+            this.collisionObjects.length ===
+                0
+        ) {
+
+            return false;
+        }
+
+
+        const origin =
+            enemyPosition
+                .clone();
+
+
+        origin.y +=
+            1.45;
+
+
+        const destination =
+            position
+                .clone();
+
+
+        destination.y +=
+            1.15;
+
+
+        const direction =
+            destination
+                .clone()
+                .sub(
+                    origin
+                );
+
+
+        const distance =
+            direction.length();
+
+
+        if (
+            distance <
+            0.25
+        ) {
+
+            return false;
+        }
+
+
+        direction.normalize();
+
+
+        this.obstacleRaycaster.set(
+            origin,
+            direction
+        );
+
+
+        this.obstacleRaycaster.near =
+            0.05;
+
+        this.obstacleRaycaster.far =
+            Math.max(
+                0.05,
+                distance -
+                0.35
+            );
+
+
+        const hits =
+            this.obstacleRaycaster
+                .intersectObjects(
+                    this.collisionObjects,
+                    true
+                );
+
+
+        return (
+            hits.length >
+            0
+        );
+    }
+
+
+    findCombatCoverPosition(
+        enemyPosition,
+        {
+            minDistance = 4,
+            maxDistance = 18
+        } = {}
+    ) {
+
+        if (
+            !enemyPosition
+        ) {
+
+            return null;
+        }
+
+
+        const currentPosition =
+            this.bot
+                .getPosition();
+
+
+        const candidates =
+            [];
+
+
+        // ----------------------------------------------------
+        // 优先使用导航节点作为候选掩体。
+        // 这样找到的位置通常也是 BOT 可以走到的位置。
+        // ----------------------------------------------------
+
+        if (
+            this.navigationGraph
+        ) {
+
+            for (
+                const node
+                of this.navigationGraph
+                    .getNodes()
+            ) {
+
+                const position =
+                    node.position;
+
+
+                const botDistance =
+                    currentPosition
+                        .distanceTo(
+                            position
+                        );
+
+
+                if (
+                    botDistance <
+                        minDistance ||
+                    botDistance >
+                        maxDistance
+                ) {
+
+                    continue;
+                }
+
+
+                if (
+                    this.isPositionInsideObstacle(
+                        position,
+                        Math.max(
+                            0.45,
+                            this.bot.radius ||
+                            0.45
+                        )
+                    )
+                ) {
+
+                    continue;
+                }
+
+
+                if (
+                    !this.isPositionCoveredFromEnemy(
+                        position,
+                        enemyPosition
+                    )
+                ) {
+
+                    continue;
+                }
+
+
+                /*
+                 * 掩体位置不要明显更靠近敌人。
+                 */
+                const currentEnemyDistance =
+                    currentPosition
+                        .distanceTo(
+                            enemyPosition
+                        );
+
+
+                const candidateEnemyDistance =
+                    position
+                        .distanceTo(
+                            enemyPosition
+                        );
+
+
+                if (
+                    candidateEnemyDistance <
+                    currentEnemyDistance -
+                        1.5
+                ) {
+
+                    continue;
+                }
+
+
+                /*
+                 * 分数越低越好：
+                 * - BOT 到掩体距离短
+                 * - 与敌人保持一定距离
+                 */
+                const score =
+                    botDistance -
+                    Math.min(
+                        8,
+                        candidateEnemyDistance *
+                        0.10
+                    );
+
+
+                candidates.push({
+                    position:
+                        position.clone(),
+
+                    score
+                });
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // 没有导航候选时：
+        // 在远离敌人的扇形区域做少量 fallback 采样。
+        // ----------------------------------------------------
+
+        if (
+            candidates.length ===
+            0
+        ) {
+
+            const away =
+                currentPosition
+                    .clone()
+                    .sub(
+                        enemyPosition
+                    );
+
+
+            away.y = 0;
+
+
+            if (
+                away.lengthSq() <
+                0.001
+            ) {
+
+                away.set(
+                    0,
+                    0,
+                    1
+                );
+            }
+
+
+            away.normalize();
+
+
+            const side =
+                new THREE.Vector3(
+                    -away.z,
+                    0,
+                    away.x
+                );
+
+
+            const offsets = [
+                [6, 0],
+                [8, 3],
+                [8, -3],
+                [11, 4],
+                [11, -4],
+                [14, 0]
+            ];
+
+
+            for (
+                const [
+                    back,
+                    lateral
+                ]
+                of offsets
+            ) {
+
+                const candidate =
+                    currentPosition
+                        .clone()
+                        .addScaledVector(
+                            away,
+                            back
+                        )
+                        .addScaledVector(
+                            side,
+                            lateral
+                        );
+
+
+                if (
+                    this.isPositionInsideObstacle(
+                        candidate,
+                        Math.max(
+                            0.5,
+                            this.bot.radius ||
+                            0.45
+                        )
+                    )
+                ) {
+
+                    continue;
+                }
+
+
+                if (
+                    !this.isPositionCoveredFromEnemy(
+                        candidate,
+                        enemyPosition
+                    )
+                ) {
+
+                    continue;
+                }
+
+
+                candidates.push({
+                    position:
+                        candidate,
+
+                    score:
+                        currentPosition
+                            .distanceTo(
+                                candidate
+                            )
+                });
+            }
+        }
+
+
+        if (
+            candidates.length ===
+            0
+        ) {
+
+            return null;
+        }
+
+
+        candidates.sort(
+            (
+                a,
+                b
+            ) =>
+                a.score -
+                b.score
+        );
+
+
+        return candidates[0]
+            .position
+            .clone();
+    }
+
+
+    moveTowardCover(
+        coverPosition,
+        delta,
+        speed
+    ) {
+
+        if (
+            !coverPosition
+        ) {
+
+            return false;
+        }
+
+
+        const position =
+            this.bot
+                .getPosition();
+
+
+        const distance =
+            position
+                .distanceTo(
+                    coverPosition
+                );
+
+
+        if (
+            distance <
+            1.65
+        ) {
+
+            this.bot.stopMoving();
+
+            this.resetStuckDetection(
+                false
+            );
+
+            return false;
+        }
+
+
+        if (
+            this.navigationGraph
+        ) {
+
+            if (
+                this.shouldRebuildNavigationPath(
+                    coverPosition,
+                    1.25
+                ) &&
+                this.navigationRetryTimer <=
+                    0
+            ) {
+
+                if (
+                    !this.buildPathTo(
+                        coverPosition
+                    )
+                ) {
+
+                    this.navigationRetryTimer =
+                        0.30;
+                }
+            }
+
+
+            if (
+                this.followNavigationPath(
+                    delta,
+                    speed,
+                    coverPosition
+                )
+            ) {
+
+                return true;
+            }
+        }
+
+
+        const direction =
+            coverPosition
+                .clone()
+                .sub(
+                    position
+                );
+
+
+        direction.y = 0;
+
+
+        if (
+            direction.lengthSq() >
+            0.001
+        ) {
+
+            direction.normalize();
+
+
+            this.moveSmart(
+                direction,
+                delta,
+                speed
+            );
+
+
+            return true;
+        }
+
+
+        return false;
+    }
+
+
+    // ========================================================
+    // Reload - Combat V2
     // ========================================================
 
     updateReload(delta) {
@@ -4500,6 +5106,9 @@ export class BotAI {
 
         if (!weapon) {
 
+            this.reloadCoverTarget =
+                null;
+
             this.state.setState(
                 BOT_STATE.PATROL
             );
@@ -4508,16 +5117,114 @@ export class BotAI {
         }
 
 
-        this.bot.stopMoving();
+        const enemyPosition =
+            (
+                this.target &&
+                this._isEntityAlive(
+                    this.target
+                )
+            )
+                ? this._getEntityPosition(
+                    this.target
+                )
+                : null;
 
-        this.resetStuckDetection(
-            false
-        );
+
+        /*
+         * 换弹期间如果敌人仍然存在，
+         * 尝试向附近掩体移动。
+         *
+         * 不要求一定到达掩体才换弹，
+         * 因为 weapon.reload() 已经开始计时。
+         */
+        if (
+            weapon.isReloading &&
+            enemyPosition
+        ) {
+
+            if (
+                !this.reloadCoverTarget &&
+                this.coverSearchCooldown <=
+                    0
+            ) {
+
+                this.reloadCoverTarget =
+                    this.findCombatCoverPosition(
+                        enemyPosition,
+                        {
+                            minDistance:
+                                2.5,
+
+                            maxDistance:
+                                13
+                        }
+                    );
+
+
+                this.coverSearchCooldown =
+                    0.65;
+
+
+                if (
+                    this.reloadCoverTarget
+                ) {
+
+                    this.clearNavigationPath();
+                }
+            }
+
+
+            if (
+                this.reloadCoverTarget
+            ) {
+
+                this.moveTowardCover(
+                    this.reloadCoverTarget,
+                    delta,
+                    this.getDifficultyMovementSpeed(
+                        BOT_CONFIG.retreatSpeed
+                    )
+                );
+
+
+                this.bot.facePositionSmooth(
+                    enemyPosition,
+                    delta,
+                    8
+                );
+
+            } else {
+
+                /*
+                 * 找不到安全掩体时不乱跑，
+                 * 保留旧版稳定行为。
+                 */
+                this.bot.stopMoving();
+
+                this.resetStuckDetection(
+                    false
+                );
+            }
+
+        } else {
+
+            this.bot.stopMoving();
+
+            this.resetStuckDetection(
+                false
+            );
+        }
 
 
         if (
             !weapon.isReloading
         ) {
+
+            this.reloadCoverTarget =
+                null;
+
+            this.clearNavigationPath();
+
 
             if (
                 this.target &&
@@ -4541,7 +5248,7 @@ export class BotAI {
 
 
     // ========================================================
-    // Retreat
+    // Retreat - Combat V2
     // ========================================================
 
     shouldRetreat() {
@@ -4557,18 +5264,48 @@ export class BotAI {
 
 
         return (
+            this.retreatCooldown <=
+                0 &&
             this.bot.hp <
-            personality
-                .retreatThreshold
+                personality
+                    .retreatThreshold
         );
     }
 
 
     enterRetreat() {
 
+        /*
+         * 已经处于 RETREAT 时不要反复初始化。
+         */
+        if (
+            this.state.state ===
+            BOT_STATE.RETREAT
+        ) {
+
+            return;
+        }
+
+
         this.state.setState(
             BOT_STATE.RETREAT
         );
+
+
+        this.coverTarget =
+            null;
+
+        this.coverHoldTimer =
+            0;
+
+        this.retreatMaxTimer =
+            randomRange(
+                4.5,
+                7.0
+            );
+
+
+        this.clearNavigationPath();
 
 
         this.sendRadio(
@@ -4581,7 +5318,111 @@ export class BotAI {
     }
 
 
+    leaveRetreat(
+        enemyPosition = null
+    ) {
+
+        this.coverTarget =
+            null;
+
+        this.coverHoldTimer =
+            0;
+
+        this.retreatMaxTimer =
+            0;
+
+
+        /*
+         * 防止低血量 BOT：
+         * COMBAT -> RETREAT -> COMBAT -> RETREAT
+         * 每帧循环。
+         *
+         * 退出掩体后至少几秒才允许再次撤退。
+         */
+        this.retreatCooldown =
+            randomRange(
+                4.0,
+                6.5
+            );
+
+
+        this.clearNavigationPath();
+
+
+        if (
+            this.target &&
+            this._isEntityAlive(
+                this.target
+            )
+        ) {
+
+            if (
+                enemyPosition &&
+                this.hasLineOfSightTo(
+                    this.target
+                )
+            ) {
+
+                this.state.setState(
+                    BOT_STATE.COMBAT
+                );
+
+            } else {
+
+                this.alertPosition =
+                    this.lastKnownPosition
+                        ?.clone() ||
+                    enemyPosition
+                        ?.clone() ||
+                    null;
+
+
+                if (
+                    this.alertPosition
+                ) {
+
+                    this.alertTimer =
+                        randomRange(
+                            2.5,
+                            4.0
+                        );
+
+
+                    this.state.setState(
+                        BOT_STATE.ALERT
+                    );
+
+                } else {
+
+                    this.state.setState(
+                        BOT_STATE.PATROL
+                    );
+                }
+            }
+
+        } else {
+
+            this.target =
+                null;
+
+            this.state.setState(
+                BOT_STATE.PATROL
+            );
+
+            this.pickRandomPatrolPoint();
+        }
+    }
+
+
     updateRetreat(delta) {
+
+        this.retreatMaxTimer =
+            Math.max(
+                0,
+                this.retreatMaxTimer -
+                delta
+            );
+
 
         if (
             !this.target ||
@@ -4590,9 +5431,7 @@ export class BotAI {
             )
         ) {
 
-            this.state.setState(
-                BOT_STATE.PATROL
-            );
+            this.leaveRetreat();
 
             return;
         }
@@ -4606,13 +5445,204 @@ export class BotAI {
 
         if (!enemyPosition) {
 
-            this.state.setState(
-                BOT_STATE.PATROL
-            );
+            this.leaveRetreat();
 
             return;
         }
 
+
+        /*
+         * 无论是否正在移动，
+         * 残血 BOT 仍尽量看着敌人方向。
+         */
+        this.bot.facePositionSmooth(
+            enemyPosition,
+            delta,
+            8
+        );
+
+
+        // ----------------------------------------------------
+        // Step 1: 找掩体
+        // ----------------------------------------------------
+
+        if (
+            !this.coverTarget &&
+            this.coverSearchCooldown <=
+                0
+        ) {
+
+            this.coverTarget =
+                this.findCombatCoverPosition(
+                    enemyPosition,
+                    {
+                        minDistance:
+                            3.5,
+
+                        maxDistance:
+                            18
+                    }
+                );
+
+
+            this.coverSearchCooldown =
+                0.75;
+
+
+            if (
+                this.coverTarget
+            ) {
+
+                this.clearNavigationPath();
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // Step 2: 前往掩体
+        // ----------------------------------------------------
+
+        if (
+            this.coverTarget &&
+            this.coverHoldTimer <=
+                0
+        ) {
+
+            const distanceToCover =
+                this.bot
+                    .getPosition()
+                    .distanceTo(
+                        this.coverTarget
+                    );
+
+
+            if (
+                distanceToCover >
+                1.65
+            ) {
+
+                this.moveTowardCover(
+                    this.coverTarget,
+                    delta,
+                    this.getDifficultyMovementSpeed(
+                        BOT_CONFIG.retreatSpeed
+                    )
+                );
+
+
+                /*
+                 * 撤退总时间到上限：
+                 * 即使没完美到达掩体，也重新投入搜索/战斗，
+                 * 防止 BOT 永久处于 RETREAT。
+                 */
+                if (
+                    this.retreatMaxTimer <=
+                    0
+                ) {
+
+                    this.leaveRetreat(
+                        enemyPosition
+                    );
+                }
+
+
+                return;
+            }
+
+
+            /*
+             * 到达掩体后只短暂停留。
+             */
+            this.coverHoldTimer =
+                randomRange(
+                    1.2,
+                    2.8
+                );
+
+
+            this.bot.stopMoving();
+
+            this.bot.setCrouching(
+                chance(
+                    0.55
+                )
+            );
+
+
+            this.clearNavigationPath();
+        }
+
+
+        // ----------------------------------------------------
+        // Step 3: 掩体内短暂停留
+        // ----------------------------------------------------
+
+        if (
+            this.coverTarget &&
+            this.coverHoldTimer >
+                0
+        ) {
+
+            this.coverHoldTimer =
+                Math.max(
+                    0,
+                    this.coverHoldTimer -
+                        delta
+                );
+
+
+            this.bot.stopMoving();
+
+
+            /*
+             * 掩体里仍然持续观察敌人。
+             * 如果敌人绕到能直接看见 BOT 的位置，
+             * 提前结束躲藏。
+             */
+            const exposed =
+                this.hasLineOfSightTo(
+                    this.target
+                );
+
+
+            if (
+                exposed &&
+                this.coverHoldTimer >
+                    0.65
+            ) {
+
+                this.coverHoldTimer =
+                    0.65;
+            }
+
+
+            if (
+                this.coverHoldTimer <=
+                    0 ||
+                this.retreatMaxTimer <=
+                    0
+            ) {
+
+                this.bot.setCrouching(
+                    false
+                );
+
+
+                this.leaveRetreat(
+                    enemyPosition
+                );
+            }
+
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // Fallback:
+        // 找不到掩体时继续使用旧版“远离敌人 + moveSmart”
+        // 但最多持续 retreatMaxTimer。
+        // ----------------------------------------------------
 
         const position =
             this.bot
@@ -4641,30 +5671,25 @@ export class BotAI {
             this.moveSmart(
                 retreatDirection,
                 delta,
-                BOT_CONFIG.retreatSpeed
+                this.getDifficultyMovementSpeed(
+                    BOT_CONFIG.retreatSpeed
+                )
             );
         }
 
 
-        this.bot.facePositionSmooth(
-            enemyPosition,
-            delta
-        );
+        if (
+            this.retreatMaxTimer <=
+            0
+        ) {
 
-
-        const distance =
-            position.distanceTo(
-                enemyPosition
+            this.bot.setCrouching(
+                false
             );
 
 
-        if (
-            distance >
-            30
-        ) {
-
-            this.state.setState(
-                BOT_STATE.COMBAT
+            this.leaveRetreat(
+                enemyPosition
             );
         }
     }

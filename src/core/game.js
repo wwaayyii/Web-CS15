@@ -1784,6 +1784,66 @@ export class Game {
         );
 
 
+        /*
+         * Reload Sound V2
+         *
+         * 由 WeaponView 在换弹动画不同阶段发送：
+         * - mag-release
+         * - mag-out
+         * - mag-in
+         * - action
+         *
+         * 只处理玩家自己的第一人称换弹声音。
+         */
+        gameEvents.on(
+            "weapon:reload-stage",
+            data => {
+				/*
+				console.log(
+					"[ReloadDebug][Game] reload-stage:",
+					data?.stage,
+					data?.weaponId
+				);
+				
+				console.log(
+            "[ReloadDebug][AudioState]",
+            {
+                initialized:
+                    audio.initialized,
+
+                contextState:
+                    audio.context?.state,
+
+                masterVolume:
+                    audio.masterVolume,
+
+                weaponVolume:
+                    audio.weaponVolume
+            }
+        );
+		*/
+				
+                if (
+                    data?.owner &&
+                    data.owner !==
+                    this.player
+                ) {
+
+                    return;
+                }
+
+
+                audio.playReloadStage(
+                    data?.stage ||
+                    "start",
+
+                    data?.weaponId ||
+                    "default"
+                );
+            }
+        );
+
+
         gameEvents.on(
             "economy:purchase",
             data => {

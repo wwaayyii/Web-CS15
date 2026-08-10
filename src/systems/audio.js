@@ -940,7 +940,27 @@ export class AudioSystem {
 
     playReload() {
 
-        if (!this.initialized) {
+        /*
+         * Reload Sound V2:
+         * 实际机械声由 weapon:reload-stage 驱动。
+         * 这里保留为兼容入口，但不再一次性播放整套声音。
+         */
+        this.playReloadStage(
+            "start"
+        );
+    }
+
+
+    playReloadStage(
+        stage = "start",
+        weaponId = "default"
+    ) {
+
+        if (
+            !this.initialized ||
+            !this.context ||
+            !this.masterGain
+        ) {
             return;
         }
 
@@ -952,71 +972,530 @@ export class AudioSystem {
             ctx.currentTime;
 
 
-        const frequencies = [
-            900,
-            620,
-            1100
-        ];
+        // ====================================================
+        // Reload Sound V3
+        //
+        // Web Audio procedural mechanical sound.
+        // No external WAV / MP3 required.
+        // ====================================================
+
+        let lowFrequency =
+            420;
+
+        let highFrequency =
+            1150;
+
+        let duration =
+            0.075;
+
+        let volume =
+            0.13 *
+            this.weaponVolume;
+
+        let noiseVolume =
+            0.075 *
+            this.weaponVolume;
+
+        let noiseFrequency =
+            1500;
 
 
-        frequencies.forEach(
-            (
-                frequency,
-                index
-            ) => {
+        switch (
+            stage
+        ) {
 
-                const oscillator =
-                    ctx.createOscillator();
+            // magazine catch / release button
+            case "mag-release":
 
-                const gain =
-                    ctx.createGain();
+                lowFrequency =
+                    520;
+
+                highFrequency =
+                    1450;
+
+                duration =
+                    0.055;
+
+                volume =
+                    0.12 *
+                    this.weaponVolume;
+
+                noiseVolume =
+                    0.060 *
+                    this.weaponVolume;
+
+                noiseFrequency =
+                    1900;
+
+                break;
 
 
-                oscillator.type =
-                    "square";
+            // old magazine sliding / leaving weapon
+            case "mag-out":
+
+                lowFrequency =
+                    260;
+
+                highFrequency =
+                    760;
+
+                duration =
+                    0.105;
+
+                volume =
+                    0.135 *
+                    this.weaponVolume;
+
+                noiseVolume =
+                    0.095 *
+                    this.weaponVolume;
+
+                noiseFrequency =
+                    900;
+
+                break;
 
 
-                const startTime =
-                    now +
-                    index * 0.10;
+            // new magazine locks into magwell
+            case "mag-in":
+
+                lowFrequency =
+                    340;
+
+                highFrequency =
+                    1200;
+
+                duration =
+                    0.095;
+
+                volume =
+                    0.17 *
+                    this.weaponVolume;
+
+                noiseVolume =
+                    0.10 *
+                    this.weaponVolume;
+
+                noiseFrequency =
+                    1350;
+
+                break;
 
 
-                oscillator.frequency.setValueAtTime(
-                    frequency,
-                    startTime
-                );
+            // slide / bolt / action completion
+            case "action":
+
+                lowFrequency =
+                    230;
+
+                highFrequency =
+                    1550;
+
+                duration =
+                    0.12;
+
+                volume =
+                    0.18 *
+                    this.weaponVolume;
+
+                noiseVolume =
+                    0.115 *
+                    this.weaponVolume;
+
+                noiseFrequency =
+                    1800;
+
+                break;
 
 
-                gain.gain.setValueAtTime(
+            case "start":
+            default:
+
+                lowFrequency =
+                    400;
+
+                highFrequency =
+                    900;
+
+                duration =
+                    0.045;
+
+                volume =
+                    0.07 *
+                    this.weaponVolume;
+
+                noiseVolume =
                     0.035 *
-                    this.weaponVolume,
-                    startTime
-                );
+                    this.weaponVolume;
 
-                gain.gain.exponentialRampToValueAtTime(
-                    0.001,
-                    startTime + 0.045
-                );
+                noiseFrequency =
+                    1100;
 
-
-                oscillator.connect(
-                    gain
-                );
-
-                gain.connect(
-                    this.masterGain
-                );
+                break;
+        }
 
 
-                oscillator.start(
-                    startTime
-                );
+        // ----------------------------------------------------
+        // Weapon family tuning
+        // ----------------------------------------------------
 
-                oscillator.stop(
-                    startTime + 0.05
-                );
-            }
+        const isPistol =
+            (
+                weaponId ===
+                    "usp" ||
+                weaponId ===
+                    "glock" ||
+                weaponId ===
+                    "deagle"
+            );
+
+
+        const isRifle =
+            (
+                weaponId ===
+                    "ak47" ||
+                weaponId ===
+                    "m4a1"
+            );
+
+
+        const isSniper =
+            (
+                weaponId ===
+                    "awp" ||
+                weaponId ===
+                    "scout"
+            );
+
+
+        if (
+            isPistol
+        ) {
+
+            highFrequency *=
+                1.12;
+
+            duration *=
+                0.90;
+        }
+
+
+        if (
+            isRifle
+        ) {
+
+            lowFrequency *=
+                0.90;
+
+            volume *=
+                1.05;
+
+            noiseVolume *=
+                1.08;
+        }
+
+
+        if (
+            isSniper
+        ) {
+
+            lowFrequency *=
+                0.72;
+
+            highFrequency *=
+                0.78;
+
+            duration *=
+                1.22;
+
+            volume *=
+                1.16;
+        }
+
+
+        // ====================================================
+        // Layer 1: metal click / clack
+        // ====================================================
+
+        const metal =
+            ctx.createOscillator();
+
+
+        const metalGain =
+            ctx.createGain();
+
+
+        const metalFilter =
+            ctx.createBiquadFilter();
+
+
+        /*
+         * triangle 比 square 少电子蜂鸣感，
+         * 但仍有明显机械撞击的谐波。
+         */
+        metal.type =
+            "triangle";
+
+
+        metal.frequency.setValueAtTime(
+            Math.max(
+                90,
+                highFrequency
+            ),
+            now
         );
+
+
+        metal.frequency.exponentialRampToValueAtTime(
+            Math.max(
+                80,
+                lowFrequency
+            ),
+            now + duration
+        );
+
+
+        metalFilter.type =
+            "bandpass";
+
+
+        metalFilter.frequency.setValueAtTime(
+            Math.max(
+                350,
+                highFrequency *
+                0.82
+            ),
+            now
+        );
+
+
+        metalFilter.Q.setValueAtTime(
+            1.6,
+            now
+        );
+
+
+        metalGain.gain.setValueAtTime(
+            Math.max(
+                0.001,
+                volume
+            ),
+            now
+        );
+
+
+        metalGain.gain.exponentialRampToValueAtTime(
+            0.001,
+            now + duration
+        );
+
+
+        metal.connect(
+            metalFilter
+        );
+
+
+        metalFilter.connect(
+            metalGain
+        );
+
+
+        metalGain.connect(
+            this.masterGain
+        );
+
+
+        metal.start(
+            now
+        );
+
+
+        metal.stop(
+            now +
+            duration +
+            0.01
+        );
+
+
+        // ====================================================
+        // Layer 2: mechanical friction / magazine body
+        // ====================================================
+
+        const noiseBuffer =
+            this._createNoiseBuffer(
+                duration *
+                1.15
+            );
+
+
+        if (
+            noiseBuffer
+        ) {
+
+            const noise =
+                ctx.createBufferSource();
+
+
+            const noiseFilter =
+                ctx.createBiquadFilter();
+
+
+            const noiseGain =
+                ctx.createGain();
+
+
+            noise.buffer =
+                noiseBuffer;
+
+
+            noiseFilter.type =
+                "bandpass";
+
+
+            noiseFilter.frequency.setValueAtTime(
+                noiseFrequency,
+                now
+            );
+
+
+            noiseFilter.frequency.exponentialRampToValueAtTime(
+                Math.max(
+                    180,
+                    noiseFrequency *
+                    0.38
+                ),
+                now +
+                duration
+            );
+
+
+            noiseFilter.Q.setValueAtTime(
+                0.85,
+                now
+            );
+
+
+            noiseGain.gain.setValueAtTime(
+                Math.max(
+                    0.001,
+                    noiseVolume
+                ),
+                now
+            );
+
+
+            noiseGain.gain.exponentialRampToValueAtTime(
+                0.001,
+                now +
+                duration *
+                1.10
+            );
+
+
+            noise.connect(
+                noiseFilter
+            );
+
+
+            noiseFilter.connect(
+                noiseGain
+            );
+
+
+            noiseGain.connect(
+                this.masterGain
+            );
+
+
+            noise.start(
+                now
+            );
+        }
+
+
+        // ====================================================
+        // Layer 3: extra lock impact for mag-in / action
+        // ====================================================
+
+        if (
+            stage ===
+                "mag-in" ||
+            stage ===
+                "action"
+        ) {
+
+            const lock =
+                ctx.createOscillator();
+
+
+            const lockGain =
+                ctx.createGain();
+
+
+            lock.type =
+                "square";
+
+
+            const lockStart =
+                now +
+                duration *
+                0.18;
+
+
+            const lockFrequency =
+                stage ===
+                    "action"
+                    ? 390
+                    : 520;
+
+
+            lock.frequency.setValueAtTime(
+                lockFrequency,
+                lockStart
+            );
+
+
+            lock.frequency.exponentialRampToValueAtTime(
+                120,
+                lockStart +
+                0.045
+            );
+
+
+            lockGain.gain.setValueAtTime(
+                0.065 *
+                this.weaponVolume,
+                lockStart
+            );
+
+
+            lockGain.gain.exponentialRampToValueAtTime(
+                0.001,
+                lockStart +
+                0.050
+            );
+
+
+            lock.connect(
+                lockGain
+            );
+
+
+            lockGain.connect(
+                this.masterGain
+            );
+
+
+            lock.start(
+                lockStart
+            );
+
+
+            lock.stop(
+                lockStart +
+                0.055
+            );
+        }
     }
 
 
@@ -1956,11 +2435,17 @@ gameEvents.on(
 );
 
 
+/*
+ * Reload Sound V2 的阶段事件由 game.js / Game.bindAudioEvents()
+ * 统一转发给 audio.playReloadStage()。
+ */
+
+
 gameEvents.on(
-    "weapon:reload",
+    "weapon:empty",
     () => {
 
-        audio.playReload();
+        audio.playEmptyClick();
     }
 );
 
