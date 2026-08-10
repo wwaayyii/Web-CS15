@@ -1057,7 +1057,7 @@ export const GRENADE_CONFIG = freezeDeep({
 
         radius: 18,
 
-        maxBlindTime: 4.5,
+        maxBlindTime: 5.0,
 
         bounce: 0.48,
 
@@ -1572,6 +1572,14 @@ export const INPUT_CONFIG = freezeDeep({
     sprint: "ShiftLeft",
 
     reload: "KeyR",
+
+    // Grenade Select V1
+    // 4 = HE, 5 = Flashbang, 6 = Smoke, G = Throw selected grenade
+    grenadeHE: "Digit4",
+
+    grenadeFlash: "Digit5",
+
+    grenadeSmoke: "Digit6",
 
     grenade: "KeyG",
 

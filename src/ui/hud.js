@@ -92,7 +92,11 @@ export class HUDSystem {
 
             statusText: null,
 
-            crosshair: null
+            crosshair: null,
+
+            grenadeIndicator: null,
+
+            flashOverlay: null
         };
 
 
@@ -128,6 +132,20 @@ export class HUDSystem {
 
         this.crosshairLastTime =
             performance.now();
+
+
+        // ====================================================
+        // Flashbang V1
+        // ====================================================
+
+        this.flashFadeTimer =
+            null;
+
+        this.flashHideTimer =
+            null;
+
+        this.flashEndTime =
+            0;
 
 
         // ====================================================
@@ -267,6 +285,16 @@ export class HUDSystem {
             root.getElementById(
                 "crosshair"
             );
+
+
+        this.createGrenadeIndicator(
+            root
+        );
+
+
+        this.createFlashOverlay(
+            root
+        );
 
 
         this._bindEvents();
@@ -778,6 +806,67 @@ export class HUDSystem {
 
 
         // ----------------------------------------------------
+        // Grenade Select / Inventory
+        // ----------------------------------------------------
+
+        this.handlers.grenadeSelected =
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.updateGrenadeIndicator(
+                    data.type
+                );
+            };
+
+
+        this.handlers.grenadeInventoryChanged =
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.updateGrenadeIndicator();
+            };
+
+
+        // ----------------------------------------------------
+        // Flashbang V1
+        // ----------------------------------------------------
+
+        this.handlers.grenadeFlash =
+            data => {
+
+                if (
+                    data.target !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.showFlashEffect({
+                    strength:
+                        data.strength,
+
+                    duration:
+                        data.duration
+                });
+            };
+
+
+        // ----------------------------------------------------
         // Buy
         // ----------------------------------------------------
 
@@ -943,6 +1032,24 @@ export class HUDSystem {
 
 
         gameEvents.on(
+            "grenade:selected",
+            this.handlers.grenadeSelected
+        );
+
+
+        gameEvents.on(
+            "grenade:inventory-changed",
+            this.handlers.grenadeInventoryChanged
+        );
+
+
+        gameEvents.on(
+            "grenade:flash",
+            this.handlers.grenadeFlash
+        );
+
+
+        gameEvents.on(
             "ui:buy-success",
             this.handlers.buySuccess
         );
@@ -968,6 +1075,8 @@ export class HUDSystem {
         this.refreshRound();
 
         this.refreshScoreboard();
+
+        this.updateGrenadeIndicator();
     }
 
 
@@ -1268,6 +1377,388 @@ export class HUDSystem {
                         : player.isMoving
                             ? "move"
                             : "stand";
+    }
+
+
+    // ========================================================
+    // Grenade Select V1
+    // ========================================================
+
+    createGrenadeIndicator(
+        root = document
+    ) {
+
+        let element =
+            root.getElementById(
+                "grenade-selected-indicator"
+            );
+
+
+        if (!element) {
+
+            element =
+                document.createElement(
+                    "div"
+                );
+
+
+            element.id =
+                "grenade-selected-indicator";
+
+
+            element.style.position =
+                "fixed";
+
+            element.style.right =
+                "24px";
+
+            element.style.bottom =
+                "112px";
+
+            element.style.zIndex =
+                "120";
+
+            element.style.padding =
+                "5px 9px";
+
+            element.style.border =
+                "1px solid rgba(255,255,255,.20)";
+
+            element.style.background =
+                "rgba(8,12,16,.58)";
+
+            element.style.color =
+                "#e8edf2";
+
+            element.style.fontFamily =
+                "Arial, Helvetica, sans-serif";
+
+            element.style.fontSize =
+                "12px";
+
+            element.style.fontWeight =
+                "700";
+
+            element.style.letterSpacing =
+                ".7px";
+
+            element.style.pointerEvents =
+                "none";
+
+            element.style.userSelect =
+                "none";
+
+
+            document.body.appendChild(
+                element
+            );
+        }
+
+
+        this.elements.grenadeIndicator =
+            element;
+
+
+        this.updateGrenadeIndicator();
+    }
+
+
+    updateGrenadeIndicator(
+        forcedType = null
+    ) {
+
+        const element =
+            this.elements
+                .grenadeIndicator;
+
+
+        if (
+            !element ||
+            !this.player
+        ) {
+
+            return;
+        }
+
+
+        const type =
+            forcedType ||
+            this.player
+                .selectedGrenadeType ||
+            "he";
+
+
+        const names = {
+            he:
+                "HE",
+
+            flash:
+                "FLASH",
+
+            smoke:
+                "SMOKE"
+        };
+
+
+        const count =
+            this.player
+                .grenadeInventory
+                ?.getCount?.(
+                    type
+                ) ??
+            0;
+
+
+        element.textContent =
+            `GRENADE: ${
+                names[type] ||
+                String(type).toUpperCase()
+            }  x${count}`;
+
+
+        element.dataset.type =
+            type;
+
+
+        element.dataset.empty =
+            count <= 0
+                ? "true"
+                : "false";
+
+
+        element.style.opacity =
+            count <= 0
+                ? "0.55"
+                : "1";
+    }
+
+
+    // ========================================================
+    // Flashbang V1
+    // ========================================================
+
+    createFlashOverlay(
+        root = document
+    ) {
+
+        let overlay =
+            root.getElementById(
+                "flashbang-overlay"
+            );
+
+
+        if (!overlay) {
+
+            overlay =
+                document.createElement(
+                    "div"
+                );
+
+
+            overlay.id =
+                "flashbang-overlay";
+
+
+            overlay.style.position =
+                "fixed";
+
+            overlay.style.inset =
+                "0";
+
+            overlay.style.zIndex =
+                "9998";
+
+            overlay.style.background =
+                "#ffffff";
+
+            overlay.style.opacity =
+                "0";
+
+            overlay.style.pointerEvents =
+                "none";
+
+            overlay.style.display =
+                "block";
+
+            overlay.style.transition =
+                "none";
+
+            overlay.style.willChange =
+                "opacity";
+
+
+            document.body.appendChild(
+                overlay
+            );
+        }
+
+
+        this.elements.flashOverlay =
+            overlay;
+    }
+
+
+    showFlashEffect({
+        strength = 0,
+        duration = 0
+    } = {}) {
+
+        const overlay =
+            this.elements
+                .flashOverlay;
+
+
+        if (!overlay) {
+            return;
+        }
+
+
+        strength =
+            clamp(
+                Number(strength) ||
+                    0,
+                0,
+                1
+            );
+
+
+        duration =
+            Math.max(
+                0.12,
+                Number(duration) ||
+                    0
+            );
+
+
+        if (
+            strength <=
+            0.02
+        ) {
+
+            return;
+        }
+
+
+        if (
+            this.flashFadeTimer
+        ) {
+
+            window.clearTimeout(
+                this.flashFadeTimer
+            );
+
+            this.flashFadeTimer =
+                null;
+        }
+
+
+        if (
+            this.flashHideTimer
+        ) {
+
+            window.clearTimeout(
+                this.flashHideTimer
+            );
+
+            this.flashHideTimer =
+                null;
+        }
+
+
+        const now =
+            performance.now();
+
+
+        this.flashEndTime =
+            Math.max(
+                this.flashEndTime,
+                now +
+                    duration *
+                    1000
+            );
+
+
+        /*
+         * 正对近距离时几乎全白；
+         * 背对或远距离时只做轻度闪白。
+         */
+        const peakOpacity =
+            clamp(
+                0.18 +
+                    strength *
+                    0.92,
+                0.18,
+                1
+            );
+
+
+        overlay.style.transition =
+            "none";
+
+
+        overlay.style.opacity =
+            String(
+                peakOpacity
+            );
+
+
+        /*
+         * 保持一小段强白，再开始渐隐。
+         */
+        const holdMs =
+            Math.min(
+                850,
+                100 +
+                    strength *
+                    700
+            );
+
+
+        this.flashFadeTimer =
+            window.setTimeout(
+                () => {
+
+                    const remaining =
+                        Math.max(
+                            120,
+                            this.flashEndTime -
+                                performance.now()
+                        );
+
+
+                    overlay.style.transition =
+                        `opacity ${remaining}ms ease-out`;
+
+
+                    overlay.style.opacity =
+                        "0";
+
+
+                    this.flashFadeTimer =
+                        null;
+
+
+                    this.flashHideTimer =
+                        window.setTimeout(
+                            () => {
+
+                                overlay.style.transition =
+                                    "none";
+
+                                overlay.style.opacity =
+                                    "0";
+
+                                this.flashHideTimer =
+                                    null;
+
+                            },
+                            remaining +
+                                40
+                        );
+
+                },
+                holdMs
+            );
     }
 
 
@@ -2579,6 +3070,24 @@ export class HUDSystem {
 
 
         gameEvents.off(
+            "grenade:selected",
+            this.handlers.grenadeSelected
+        );
+
+
+        gameEvents.off(
+            "grenade:inventory-changed",
+            this.handlers.grenadeInventoryChanged
+        );
+
+
+        gameEvents.off(
+            "grenade:flash",
+            this.handlers.grenadeFlash
+        );
+
+
+        gameEvents.off(
             "ui:buy-success",
             this.handlers.buySuccess
         );
@@ -2588,6 +3097,49 @@ export class HUDSystem {
             "ui:buy-failed",
             this.handlers.buyFailed
         );
+
+
+        if (
+            this.flashFadeTimer
+        ) {
+
+            window.clearTimeout(
+                this.flashFadeTimer
+            );
+
+            this.flashFadeTimer =
+                null;
+        }
+
+
+        if (
+            this.flashHideTimer
+        ) {
+
+            window.clearTimeout(
+                this.flashHideTimer
+            );
+
+            this.flashHideTimer =
+                null;
+        }
+
+
+        this.elements
+            .grenadeIndicator
+            ?.remove?.();
+
+
+        this.elements
+            .flashOverlay
+            ?.remove?.();
+
+
+        this.elements.grenadeIndicator =
+            null;
+
+        this.elements.flashOverlay =
+            null;
 
 
         this.stopDynamicCrosshair();

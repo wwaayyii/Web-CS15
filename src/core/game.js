@@ -70,7 +70,8 @@ import {
 } from "../weapons/weaponView.js";
 
 import {
-    grenadeSystem
+    grenadeSystem,
+    GRENADE_TYPE
 } from "../weapons/grenade.js";
 
 
@@ -2371,7 +2372,51 @@ export class Game {
                 break;
 
 
+            // =================================================
+            // Grenade Select V1
+            //
+            // 4 = HE
+            // 5 = Flashbang
+            // 6 = Smoke
+            // G = Throw selected grenade
+            // =================================================
+
+            case INPUT_CONFIG.grenadeHE:
+
+                event.preventDefault();
+
+                this.player.selectGrenade(
+                    GRENADE_TYPE.HE
+                );
+
+                break;
+
+
+            case INPUT_CONFIG.grenadeFlash:
+
+                event.preventDefault();
+
+                this.player.selectGrenade(
+                    GRENADE_TYPE.FLASH
+                );
+
+                break;
+
+
+            case INPUT_CONFIG.grenadeSmoke:
+
+                event.preventDefault();
+
+                this.player.selectGrenade(
+                    GRENADE_TYPE.SMOKE
+                );
+
+                break;
+
+
             case INPUT_CONFIG.grenade:
+
+                event.preventDefault();
 
                 this.player.throwGrenade();
 

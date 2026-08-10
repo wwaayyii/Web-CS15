@@ -921,6 +921,283 @@ export class Grenade {
 
 
     // ========================================================
+    // Flash V1 Helpers
+    // ========================================================
+
+    _getEntityEyePosition(
+        entity
+    ) {
+
+        if (!entity) {
+            return null;
+        }
+
+
+        if (
+            typeof entity.getEyePosition ===
+            "function"
+        ) {
+
+            const eye =
+                entity.getEyePosition();
+
+
+            if (
+                eye?.isVector3
+            ) {
+
+                return eye.clone();
+            }
+        }
+
+
+        const position =
+            this._getEntityPosition(
+                entity
+            );
+
+
+        if (!position) {
+            return null;
+        }
+
+
+        position.y +=
+            1.35;
+
+
+        return position;
+    }
+
+
+    _getEntityViewDirection(
+        entity
+    ) {
+
+        if (!entity) {
+            return null;
+        }
+
+
+        let direction =
+            null;
+
+
+        if (
+            typeof entity.getViewDirection ===
+            "function"
+        ) {
+
+            direction =
+                entity.getViewDirection();
+
+        } else if (
+            typeof entity.getAimDirection ===
+            "function"
+        ) {
+
+            direction =
+                entity.getAimDirection();
+
+        } else if (
+            typeof entity.getForwardDirection ===
+            "function"
+        ) {
+
+            direction =
+                entity.getForwardDirection();
+        }
+
+
+        if (
+            !direction?.isVector3 ||
+            direction.lengthSq() <
+                0.0001
+        ) {
+
+            return null;
+        }
+
+
+        return direction
+            .clone()
+            .normalize();
+    }
+
+
+    _hasFlashLineOfSight(
+        flashPosition,
+        entityEyePosition
+    ) {
+
+        if (
+            !flashPosition ||
+            !entityEyePosition
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            !this.collisionObjects ||
+            this.collisionObjects.length ===
+                0
+        ) {
+
+            return true;
+        }
+
+
+        const direction =
+            entityEyePosition
+                .clone()
+                .sub(
+                    flashPosition
+                );
+
+
+        const distance =
+            direction.length();
+
+
+        if (
+            distance <=
+            0.05
+        ) {
+
+            return true;
+        }
+
+
+        direction.normalize();
+
+
+        this.raycaster.set(
+            flashPosition,
+            direction
+        );
+
+
+        this.raycaster.near =
+            0.05;
+
+
+        /*
+         * 稍微缩短射线，避免目标紧贴墙时
+         * 把目标后面的墙误判成遮挡。
+         */
+        this.raycaster.far =
+            Math.max(
+                0.05,
+                distance -
+                    0.20
+            );
+
+
+        const hits =
+            this.raycaster
+                .intersectObjects(
+                    this.collisionObjects,
+                    true
+                );
+
+
+        return (
+            hits.length ===
+            0
+        );
+    }
+
+
+    _getFlashFacingFactor(
+        entity,
+        entityEyePosition,
+        flashPosition
+    ) {
+
+        const viewDirection =
+            this._getEntityViewDirection(
+                entity
+            );
+
+
+        if (!viewDirection) {
+
+            /*
+             * 没有朝向信息时不让 Flash 完全失效。
+             */
+            return {
+                dot: 0,
+                factor: 0.55
+            };
+        }
+
+
+        const toFlash =
+            flashPosition
+                .clone()
+                .sub(
+                    entityEyePosition
+                );
+
+
+        if (
+            toFlash.lengthSq() <
+            0.0001
+        ) {
+
+            return {
+                dot: 1,
+                factor: 1
+            };
+        }
+
+
+        toFlash.normalize();
+
+
+        const dot =
+            clamp(
+                viewDirection.dot(
+                    toFlash
+                ),
+                -1,
+                1
+            );
+
+
+        /*
+         * 正对 Flash：接近 100%
+         * 侧面：约 55%
+         * 完全背对：仍保留约 22% 的短暂闪白
+         */
+        const normalizedFacing =
+            clamp(
+                (
+                    dot +
+                    0.35
+                ) /
+                1.35,
+                0,
+                1
+            );
+
+
+        const factor =
+            0.22 +
+            normalizedFacing *
+                0.78;
+
+
+        return {
+            dot,
+            factor
+        };
+    }
+
+
+    // ========================================================
     // Flash
     // ========================================================
 
@@ -947,19 +1224,29 @@ export class Grenade {
             of entities
         ) {
 
-            const entityPosition =
-                this._getEntityPosition(
+            if (
+                !entity ||
+                entity.isAlive ===
+                    false
+            ) {
+
+                continue;
+            }
+
+
+            const eyePosition =
+                this._getEntityEyePosition(
                     entity
                 );
 
 
-            if (!entityPosition) {
+            if (!eyePosition) {
                 continue;
             }
 
 
             const distance =
-                entityPosition
+                eyePosition
                     .distanceTo(
                         position
                     );
@@ -969,42 +1256,113 @@ export class Grenade {
                 distance >
                 radius
             ) {
+
                 continue;
             }
 
 
-            const strength =
+            // ------------------------------------------------
+            // Wall / obstacle occlusion
+            // ------------------------------------------------
+
+            const visible =
+                this._hasFlashLineOfSight(
+                    position,
+                    eyePosition
+                );
+
+
+            if (!visible) {
+
+                gameEvents.emit(
+                    "grenade:flash-blocked",
+                    {
+                        grenade:
+                            this,
+
+                        owner:
+                            this.owner,
+
+                        target:
+                            entity,
+
+                        position:
+                            position.clone(),
+
+                        distance
+                    }
+                );
+
+
+                continue;
+            }
+
+
+            // ------------------------------------------------
+            // Distance falloff
+            // ------------------------------------------------
+
+            const distanceStrength =
                 clamp(
                     1 -
                     distance /
-                    radius,
+                        radius,
                     0,
                     1
                 );
 
 
-            const blindTime =
-                maxBlindTime *
-                strength;
-
-
             if (
-                blindTime <= 0
+                distanceStrength <=
+                0
             ) {
+
                 continue;
             }
 
 
+            // ------------------------------------------------
+            // Facing
+            // ------------------------------------------------
+
+            const facing =
+                this._getFlashFacingFactor(
+                    entity,
+                    eyePosition,
+                    position
+                );
+
+
+            const strength =
+                clamp(
+                    distanceStrength *
+                    facing.factor,
+                    0,
+                    1
+                );
+
+
             /*
-             * 后面 player.js / botAI.js
-             * 可以监听这个事件。
-             *
-             * Player:
-             * 屏幕变白
-             *
-             * BOT:
-             * accuracy 降低、停止锁定
+             * 视觉强度和致盲时间不完全线性：
+             * 中等强度的 Flash 仍然应该有短暂影响。
              */
+            const blindTime =
+                maxBlindTime *
+                Math.pow(
+                    strength,
+                    0.78
+                );
+
+
+            if (
+                blindTime <
+                0.10
+            ) {
+
+                continue;
+            }
+
+
             gameEvents.emit(
                 "grenade:flash",
                 {
@@ -1021,6 +1379,17 @@ export class Grenade {
                         position.clone(),
 
                     distance,
+
+                    distanceStrength,
+
+                    facingDot:
+                        facing.dot,
+
+                    facingFactor:
+                        facing.factor,
+
+                    occluded:
+                        false,
 
                     strength,
 
