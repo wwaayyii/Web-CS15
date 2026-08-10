@@ -1419,12 +1419,14 @@ export class Grenade {
             15;
 
 
-        /*
-         * 真正的烟雾视觉以后可以放到
-         * effects.js 增加 createSmokeCloud()。
-         *
-         * 现在先发送事件。
-         */
+        const buildTime =
+            1.0;
+
+
+        const fadeTime =
+            2.0;
+
+
         gameEvents.emit(
             "grenade:smoke",
             {
@@ -1439,9 +1441,34 @@ export class Grenade {
 
                 radius,
 
-                duration
+                duration,
+
+                buildTime,
+
+                fadeTime
             }
         );
+
+
+        /*
+         * Grenade 会在 explode() 后立即销毁，
+         * 所以持续存在的烟雾逻辑区交给 grenadeSystem 管理。
+         */
+        grenadeSystem.createSmokeZone({
+            position:
+                position.clone(),
+
+            radius,
+
+            duration,
+
+            buildTime,
+
+            fadeTime,
+
+            owner:
+                this.owner
+        });
     }
 
 
@@ -1882,6 +1909,12 @@ export class GrenadeSystem {
 
         this.entityObjects =
             new Set();
+
+
+        // Smoke Grenade V1
+        this.smokeZones = [];
+
+        this.smokeZoneId = 0;
     }
 
 
@@ -2096,6 +2129,11 @@ export class GrenadeSystem {
 
     update(delta) {
 
+        this.updateSmokeZones(
+            delta
+        );
+
+
         for (
             let i =
                 this.activeGrenades.length - 1;
@@ -2122,6 +2160,359 @@ export class GrenadeSystem {
                 );
             }
         }
+    }
+
+
+
+    // ========================================================
+    // Smoke Zone V1
+    // ========================================================
+
+    createSmokeZone({
+        position,
+        radius = 8,
+        duration = 15,
+        buildTime = 1.0,
+        fadeTime = 2.0,
+        owner = null
+    } = {}) {
+
+        if (
+            !position?.isVector3
+        ) {
+
+            return null;
+        }
+
+
+        const zone = {
+            id:
+                `smoke_${++this.smokeZoneId}`,
+
+            position:
+                position.clone(),
+
+            radius:
+                Math.max(
+                    0.5,
+                    Number(radius) || 8
+                ),
+
+            duration:
+                Math.max(
+                    0.5,
+                    Number(duration) || 15
+                ),
+
+            buildTime:
+                Math.max(
+                    0.05,
+                    Number(buildTime) || 1.0
+                ),
+
+            fadeTime:
+                Math.max(
+                    0.1,
+                    Number(fadeTime) || 2.0
+                ),
+
+            age:
+                0,
+
+            density:
+                0,
+
+            owner
+        };
+
+
+        this.smokeZones.push(
+            zone
+        );
+
+
+        return zone;
+    }
+
+
+    updateSmokeZones(
+        delta
+    ) {
+
+        for (
+            let i =
+                this.smokeZones.length - 1;
+            i >= 0;
+            i--
+        ) {
+
+            const zone =
+                this.smokeZones[i];
+
+
+            zone.age +=
+                delta;
+
+
+            const build =
+                clamp(
+                    zone.age /
+                        zone.buildTime,
+                    0,
+                    1
+                );
+
+
+            const fadeStart =
+                Math.max(
+                    zone.buildTime,
+                    zone.duration -
+                        zone.fadeTime
+                );
+
+
+            let fade =
+                1;
+
+
+            if (
+                zone.age >
+                fadeStart
+            ) {
+
+                fade =
+                    1 -
+                    clamp(
+                        (
+                            zone.age -
+                                fadeStart
+                        ) /
+                        Math.max(
+                            0.001,
+                            zone.duration -
+                                fadeStart
+                        ),
+                        0,
+                        1
+                    );
+            }
+
+
+            zone.density =
+                clamp(
+                    build *
+                        fade,
+                    0,
+                    1
+                );
+
+
+            if (
+                zone.age >=
+                zone.duration
+            ) {
+
+                this.smokeZones.splice(
+                    i,
+                    1
+                );
+            }
+        }
+    }
+
+
+    clearSmokeZones() {
+
+        this.smokeZones.length =
+            0;
+    }
+
+
+    _getSegmentSphereIntersectionLength(
+        start,
+        end,
+        center,
+        radius
+    ) {
+
+        const segment =
+            end
+                .clone()
+                .sub(
+                    start
+                );
+
+
+        const length =
+            segment.length();
+
+
+        if (
+            length <=
+            0.0001
+        ) {
+
+            return 0;
+        }
+
+
+        const direction =
+            segment
+                .clone()
+                .divideScalar(
+                    length
+                );
+
+
+        const m =
+            start
+                .clone()
+                .sub(
+                    center
+                );
+
+
+        const b =
+            m.dot(
+                direction
+            );
+
+
+        const c =
+            m.dot(
+                m
+            ) -
+            radius *
+                radius;
+
+
+        if (
+            c >
+                0 &&
+            b >
+                0
+        ) {
+
+            return 0;
+        }
+
+
+        const discriminant =
+            b *
+                b -
+            c;
+
+
+        if (
+            discriminant <
+            0
+        ) {
+
+            return 0;
+        }
+
+
+        const root =
+            Math.sqrt(
+                discriminant
+            );
+
+
+        const t0 =
+            clamp(
+                -b -
+                    root,
+                0,
+                length
+            );
+
+
+        const t1 =
+            clamp(
+                -b +
+                    root,
+                0,
+                length
+            );
+
+
+        return Math.max(
+            0,
+            t1 -
+                t0
+        );
+    }
+
+
+    isLineBlockedBySmoke(
+        start,
+        end
+    ) {
+
+        if (
+            !start?.isVector3 ||
+            !end?.isVector3
+        ) {
+
+            return false;
+        }
+
+
+        for (
+            const zone
+            of this.smokeZones
+        ) {
+
+            /*
+             * 烟刚开始生成或快消散时，
+             * 不立刻完全阻断 BOT 视线。
+             */
+            if (
+                zone.density <
+                0.35
+            ) {
+
+                continue;
+            }
+
+
+            const effectiveRadius =
+                zone.radius *
+                (
+                    0.72 +
+                    zone.density *
+                        0.28
+                );
+
+
+            const insideLength =
+                this._getSegmentSphereIntersectionLength(
+                    start,
+                    end,
+                    zone.position,
+                    effectiveRadius
+                );
+
+
+            /*
+             * 穿烟长度 × 当前密度达到阈值，
+             * 才认为真正看不见。
+             *
+             * 这样 BOT 在烟雾边缘不会频繁
+             * “看见/看不见/看见”。
+             */
+            if (
+                insideLength *
+                    zone.density >=
+                1.55
+            ) {
+
+                return true;
+            }
+        }
+
+
+        return false;
     }
 
 
@@ -2156,6 +2547,8 @@ export class GrenadeSystem {
     destroy() {
 
         this.clearActiveGrenades();
+
+        this.clearSmokeZones();
 
         this.clearRegistries();
 

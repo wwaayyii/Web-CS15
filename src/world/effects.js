@@ -69,6 +69,10 @@ export class EffectsSystem {
         this.combatFeedbackElement = null;
 
         this.combatFeedbackTimer = null;
+
+
+        // Smoke Grenade V1
+        this.smokeEffects = [];
     }
 
 
@@ -1786,6 +1790,700 @@ export class EffectsSystem {
     }
 
 
+
+    // ========================================================
+    // Smoke Grenade V3 - Procedural Sprite Smoke
+    //
+    // 纯 JS / 无外部 PNG：
+    // - Canvas 动态生成软边烟雾纹理
+    // - Sprite 代替 Sphere Mesh
+    // - Core / Body / Edge 三层
+    // - 中心更浓、外围更柔
+    // ========================================================
+
+    _createSmokeTexture() {
+
+        const size =
+            128;
+
+
+        const canvas =
+            document.createElement(
+                "canvas"
+            );
+
+
+        canvas.width =
+            size;
+
+        canvas.height =
+            size;
+
+
+        const context =
+            canvas.getContext(
+                "2d"
+            );
+
+
+        if (!context) {
+
+            return null;
+        }
+
+
+        const center =
+            size *
+            0.5;
+
+
+        const gradient =
+            context.createRadialGradient(
+                center,
+                center,
+                0,
+
+                center,
+                center,
+                center
+            );
+
+
+        /*
+         * 不是纯白圆：
+         * 中心浓、外圈快速淡出，
+         * 用于消除 Sprite 边缘。
+         */
+        gradient.addColorStop(
+            0.00,
+            "rgba(255,255,255,1.00)"
+        );
+
+        gradient.addColorStop(
+            0.28,
+            "rgba(255,255,255,0.92)"
+        );
+
+        gradient.addColorStop(
+            0.55,
+            "rgba(255,255,255,0.58)"
+        );
+
+        gradient.addColorStop(
+            0.78,
+            "rgba(255,255,255,0.20)"
+        );
+
+        gradient.addColorStop(
+            1.00,
+            "rgba(255,255,255,0.00)"
+        );
+
+
+        context.fillStyle =
+            gradient;
+
+
+        context.fillRect(
+            0,
+            0,
+            size,
+            size
+        );
+
+
+        const texture =
+            new THREE.CanvasTexture(
+                canvas
+            );
+
+
+        texture.needsUpdate =
+            true;
+
+
+        return texture;
+    }
+
+
+    createSmokeCloud(
+        position,
+        {
+            radius = 8,
+            duration = 15,
+            buildTime = 1.0,
+            fadeTime = 2.0
+        } = {}
+    ) {
+
+        if (
+            !this.initialized ||
+            !position?.isVector3
+        ) {
+
+            return null;
+        }
+
+
+        const texture =
+            this._createSmokeTexture();
+
+
+        if (!texture) {
+
+            return null;
+        }
+
+
+        const group =
+            new THREE.Group();
+
+
+        group.position.copy(
+            position
+        );
+
+
+        const visualRadius =
+            clamp(
+                radius *
+                    0.62,
+                4.3,
+                5.4
+            );
+
+
+        const sprites =
+            [];
+
+
+        const createLayer =
+            ({
+                count,
+                radialFactor,
+                minY,
+                maxY,
+                minScale,
+                maxScale,
+                colorMin,
+                colorMax,
+                opacityMin,
+                opacityMax,
+                driftHorizontal,
+                driftVertical,
+                layer
+            }) => {
+
+                for (
+                    let i = 0;
+                    i < count;
+                    i++
+                ) {
+
+                    const gray =
+                        randomRange(
+                            colorMin,
+                            colorMax
+                        );
+
+
+                    const material =
+                        new THREE.SpriteMaterial({
+                            map:
+                                texture,
+
+                            color:
+                                new THREE.Color(
+                                    gray,
+                                    gray,
+                                    gray
+                                ),
+
+                            transparent:
+                                true,
+
+                            opacity:
+                                0,
+
+                            depthWrite:
+                                false,
+
+                            depthTest:
+                                true
+                        });
+
+
+                    const sprite =
+                        new THREE.Sprite(
+                            material
+                        );
+
+
+                    const angle =
+                        randomRange(
+                            0,
+                            Math.PI *
+                                2
+                        );
+
+
+                    const horizontal =
+                        Math.sqrt(
+                            Math.random()
+                        ) *
+                        visualRadius *
+                        radialFactor;
+
+
+                    sprite.position.set(
+                        Math.cos(
+                            angle
+                        ) *
+                            horizontal,
+
+                        randomRange(
+                            minY,
+                            maxY
+                        ),
+
+                        Math.sin(
+                            angle
+                        ) *
+                            horizontal
+                    );
+
+
+                    const baseScale =
+                        randomRange(
+                            minScale,
+                            maxScale
+                        );
+
+
+                    sprite.scale.set(
+                        0.15,
+                        0.15,
+                        1
+                    );
+
+
+                    sprites.push({
+                        sprite,
+
+                        material,
+
+                        baseScale,
+
+                        baseOpacity:
+                            randomRange(
+                                opacityMin,
+                                opacityMax
+                            ),
+
+                        drift:
+                            new THREE.Vector3(
+                                randomRange(
+                                    -driftHorizontal,
+                                    driftHorizontal
+                                ),
+
+                                randomRange(
+                                    driftVertical *
+                                        0.55,
+                                    driftVertical
+                                ),
+
+                                randomRange(
+                                    -driftHorizontal,
+                                    driftHorizontal
+                                )
+                            ),
+
+                        phase:
+                            randomRange(
+                                0,
+                                Math.PI *
+                                    2
+                            ),
+
+                        layer
+                    });
+
+
+                    group.add(
+                        sprite
+                    );
+                }
+            };
+
+
+        // ----------------------------------------------------
+        // Core：中心最浓
+        // ----------------------------------------------------
+
+        createLayer({
+            count:
+                18,
+
+            radialFactor:
+                0.38,
+
+            minY:
+                0.55,
+
+            maxY:
+                2.05,
+
+            minScale:
+                2.0,
+
+            maxScale:
+                2.8,
+
+            colorMin:
+                0.23,
+
+            colorMax:
+                0.31,
+
+            opacityMin:
+                0.50,
+
+            opacityMax:
+                0.64,
+
+            driftHorizontal:
+                0.022,
+
+            driftVertical:
+                0.028,
+
+            layer:
+                "core"
+        });
+
+
+        // ----------------------------------------------------
+        // Body：主体
+        // ----------------------------------------------------
+
+        createLayer({
+            count:
+                26,
+
+            radialFactor:
+                0.72,
+
+            minY:
+                0.42,
+
+            maxY:
+                2.45,
+
+            minScale:
+                2.1,
+
+            maxScale:
+                3.1,
+
+            colorMin:
+                0.30,
+
+            colorMax:
+                0.39,
+
+            opacityMin:
+                0.31,
+
+            opacityMax:
+                0.46,
+
+            driftHorizontal:
+                0.035,
+
+            driftVertical:
+                0.038,
+
+            layer:
+                "body"
+        });
+
+
+        // ----------------------------------------------------
+        // Edge：大、淡，用来柔化外围
+        // ----------------------------------------------------
+
+        createLayer({
+            count:
+                18,
+
+            radialFactor:
+                0.98,
+
+            minY:
+                0.28,
+
+            maxY:
+                2.75,
+
+            minScale:
+                2.35,
+
+            maxScale:
+                3.55,
+
+            colorMin:
+                0.38,
+
+            colorMax:
+                0.49,
+
+            opacityMin:
+                0.13,
+
+            opacityMax:
+                0.24,
+
+            driftHorizontal:
+                0.045,
+
+            driftVertical:
+                0.045,
+
+            layer:
+                "edge"
+        });
+
+
+        this.scene.add(
+            group
+        );
+
+
+        const totalDuration =
+            Math.max(
+                0.5,
+                duration
+            );
+
+
+        const effect = {
+            object:
+                group,
+
+            duration:
+                totalDuration,
+
+            elapsed:
+                0,
+
+            update: (
+                delta,
+                state
+            ) => {
+
+                const age =
+                    state.elapsed;
+
+
+                const rawBuild =
+                    clamp(
+                        age /
+                            Math.max(
+                                0.05,
+                                buildTime
+                            ),
+                        0,
+                        1
+                    );
+
+
+                /*
+                 * Smoothstep 起烟。
+                 */
+                const build =
+                    rawBuild *
+                    rawBuild *
+                    (
+                        3 -
+                        2 *
+                        rawBuild
+                    );
+
+
+                const fadeStart =
+                    Math.max(
+                        buildTime,
+                        totalDuration -
+                            fadeTime
+                    );
+
+
+                let fade =
+                    1;
+
+
+                if (
+                    age >
+                    fadeStart
+                ) {
+
+                    fade =
+                        1 -
+                        clamp(
+                            (
+                                age -
+                                    fadeStart
+                            ) /
+                            Math.max(
+                                0.001,
+                                totalDuration -
+                                    fadeStart
+                            ),
+                            0,
+                            1
+                        );
+                }
+
+
+                const density =
+                    build *
+                    fade;
+
+
+                for (
+                    const item
+                    of sprites
+                ) {
+
+                    item.sprite.position
+                        .addScaledVector(
+                            item.drift,
+                            delta
+                        );
+
+
+                    const breathe =
+                        1 +
+                        Math.sin(
+                            age *
+                                0.62 +
+                            item.phase
+                        ) *
+                            0.045;
+
+
+                    let growth =
+                        0.42 +
+                        build *
+                            0.86;
+
+
+                    if (
+                        item.layer ===
+                        "edge"
+                    ) {
+
+                        growth *=
+                            1.06;
+                    }
+
+
+                    const scale =
+                        item.baseScale *
+                        growth *
+                        breathe;
+
+
+                    /*
+                     * Sprite 轻微纵向压扁，
+                     * 整体更像低矮烟团。
+                     */
+                    item.sprite.scale.set(
+                        scale,
+
+                        scale *
+                            0.78,
+
+                        1
+                    );
+
+
+                    item.material.opacity =
+                        clamp(
+                            item.baseOpacity *
+                                density,
+                            0,
+                            item.layer ===
+                                "core"
+                                ? 0.68
+                                : item.layer ===
+                                    "body"
+                                    ? 0.48
+                                    : 0.26
+                        );
+                }
+            },
+
+            destroy: () => {
+
+                if (
+                    group.parent
+                ) {
+
+                    group.parent.remove(
+                        group
+                    );
+                }
+
+
+                for (
+                    const item
+                    of sprites
+                ) {
+
+                    item.material.dispose();
+                }
+
+
+                texture.dispose();
+
+
+                const index =
+                    this.smokeEffects
+                        .indexOf(
+                            effect
+                        );
+
+
+                if (
+                    index >=
+                    0
+                ) {
+
+                    this.smokeEffects.splice(
+                        index,
+                        1
+                    );
+                }
+            }
+        };
+
+
+        this.activeEffects.push(
+            effect
+        );
+
+
+        this.smokeEffects.push(
+            effect
+        );
+
+
+        return effect;
+    }
+
+
     // ========================================================
     // Hitmarker
     // ========================================================
@@ -2265,6 +2963,8 @@ export class EffectsSystem {
 
         this.bulletHoleEffects.length = 0;
 
+        this.smokeEffects.length = 0;
+
 
         this.cameraShake.amount = 0;
         this.cameraShake.duration = 0;
@@ -2451,9 +3151,26 @@ gameEvents.on(
     "grenade:explode",
     (data = {}) => {
 
-        if (!data.position) {
+        if (
+            !data.position
+        ) {
+
             return;
         }
+
+
+        /*
+         * HE 才使用爆炸火球。
+         * Smoke / Flash 使用各自独立视觉。
+         */
+        if (
+            data.type !==
+            "he"
+        ) {
+
+            return;
+        }
+
 
         effects.createExplosion(
             data.position,
@@ -2461,6 +3178,42 @@ gameEvents.on(
                 radius:
                     data.visualRadius ||
                     3.5
+            }
+        );
+    }
+);
+
+
+gameEvents.on(
+    "grenade:smoke",
+    (data = {}) => {
+
+        if (
+            !data.position
+        ) {
+
+            return;
+        }
+
+
+        effects.createSmokeCloud(
+            data.position,
+            {
+                radius:
+                    data.radius ||
+                    8,
+
+                duration:
+                    data.duration ||
+                    15,
+
+                buildTime:
+                    data.buildTime ||
+                    1.0,
+
+                fadeTime:
+                    data.fadeTime ||
+                    2.0
             }
         );
     }

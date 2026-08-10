@@ -6059,6 +6059,22 @@ export class BotAI {
     direction.normalize();
 
 
+    // ========================================================
+    // Smoke Grenade V1
+    // ========================================================
+
+    if (
+        grenadeSystem
+            .isLineBlockedBySmoke(
+                origin,
+                targetPosition
+            )
+    ) {
+
+        return false;
+    }
+
+
     /*
      * 这里不要把目标模型加入 Raycaster。
      *
