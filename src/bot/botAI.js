@@ -338,6 +338,34 @@ export class BotAI {
 
 
         // ====================================================
+        // Smoke AI V2
+        //
+        // - 不直接冲进烟雾中心
+        // - 短时间保持在烟外观察
+        // - 近距离允许有限视觉感知
+        // ====================================================
+
+        this.smokeHoldTimer =
+            0;
+
+        this.smokeStrafeDirection =
+            chance(
+                0.5
+            )
+                ? 1
+                : -1;
+
+        this.smokeStrafeTimer =
+            randomRange(
+                0.55,
+                1.05
+            );
+
+        this.smokeLastBlockedPosition =
+            null;
+
+
+        // ====================================================
         // Aim
         // ====================================================
 
@@ -1096,6 +1124,14 @@ export class BotAI {
             Math.max(
                 0,
                 this.retreatCooldown -
+                delta
+            );
+
+
+        this.smokeHoldTimer =
+            Math.max(
+                0,
+                this.smokeHoldTimer -
                 delta
             );
 
@@ -2521,11 +2557,34 @@ export class BotAI {
                 );
 
 
-        this.updateCombatMovement(
-            delta,
-            targetPosition,
-            distance
-        );
+        const smokeBlocked =
+            grenadeSystem
+                .isLineBlockedBySmoke(
+                    this.bot
+                        .getEyePosition(),
+                    targetPosition
+                );
+
+
+        if (
+            smokeBlocked &&
+            distance >
+                3.2
+        ) {
+
+            this.updateSmokeBlockedMovement(
+                delta,
+                targetPosition
+            );
+
+        } else {
+
+            this.updateCombatMovement(
+                delta,
+                targetPosition,
+                distance
+            );
+        }
 
 
         this.tryThrowGrenade(
@@ -2552,6 +2611,230 @@ export class BotAI {
 				distance
 			);
 		}
+    }
+
+
+    // ========================================================
+    // Smoke AI V2 - Combat Movement
+    // ========================================================
+
+    updateSmokeBlockedMovement(
+        delta,
+        targetPosition
+    ) {
+
+        const currentPosition =
+            this.bot
+                .getPosition();
+
+
+        const eyePosition =
+            this.bot
+                .getEyePosition();
+
+
+        const smokeInfo =
+            grenadeSystem
+                .getSmokeObscuration(
+                    eyePosition,
+                    targetPosition
+                );
+
+
+        const zone =
+            smokeInfo.zone;
+
+
+        if (!zone) {
+
+            return false;
+        }
+
+
+        this.smokeLastBlockedPosition =
+            zone.position.clone();
+
+
+        /*
+         * BOT 自己已经在烟里：
+         * 不要在烟中继续高速乱冲。
+         * 保持低速侧移，尝试从最近边缘出去。
+         */
+        const insideSmoke =
+            grenadeSystem
+                .isPointInsideSmoke(
+                    currentPosition,
+                    {
+                        densityThreshold:
+                            0.35,
+
+                        radiusScale:
+                            0.86
+                    }
+                );
+
+
+        if (
+            insideSmoke
+        ) {
+
+            const away =
+                currentPosition
+                    .clone()
+                    .sub(
+                        zone.position
+                    );
+
+
+            away.y = 0;
+
+
+            if (
+                away.lengthSq() <
+                0.001
+            ) {
+
+                away.copy(
+                    this.bot
+                        .getForwardDirection()
+                );
+
+                away.y = 0;
+            }
+
+
+            away.normalize();
+
+
+            this.moveSmart(
+                away,
+                delta,
+                this.getDifficultyMovementSpeed(
+                    BOT_CONFIG.normalSpeed *
+                    0.72
+                )
+            );
+
+
+            return true;
+        }
+
+
+        /*
+         * BOT 在烟外：
+         * 不直接朝 lastKnownPosition 冲过去。
+         *
+         * 先在烟边缘横向观察一小段时间，
+         * 看敌人是否从另一侧出来。
+         */
+        if (
+            this.smokeHoldTimer <=
+            0
+        ) {
+
+            this.smokeHoldTimer =
+                randomRange(
+                    0.75,
+                    1.55
+                );
+        }
+
+
+        this.smokeStrafeTimer -=
+            delta;
+
+
+        if (
+            this.smokeStrafeTimer <=
+            0
+        ) {
+
+            this.smokeStrafeDirection *=
+                -1;
+
+
+            this.smokeStrafeTimer =
+                randomRange(
+                    0.55,
+                    1.05
+                );
+        }
+
+
+        const toSmoke =
+            zone.position
+                .clone()
+                .sub(
+                    currentPosition
+                );
+
+
+        toSmoke.y = 0;
+
+
+        if (
+            toSmoke.lengthSq() <
+                0.001
+        ) {
+
+            this.bot.stopMoving();
+
+            return true;
+        }
+
+
+        toSmoke.normalize();
+
+
+        const tangent =
+            new THREE.Vector3(
+                -toSmoke.z,
+                0,
+                toSmoke.x
+            )
+                .multiplyScalar(
+                    this.smokeStrafeDirection
+                );
+
+
+        /*
+         * 如果已经非常靠近烟边缘，
+         * 稍微加一点“远离烟中心”的分量，
+         * 防止横移时切进烟里。
+         */
+        const distanceToCenter =
+            currentPosition
+                .distanceTo(
+                    zone.position
+                );
+
+
+        if (
+            distanceToCenter <
+            zone.radius *
+                1.10
+        ) {
+
+            tangent.addScaledVector(
+                toSmoke,
+                -0.42
+            );
+
+            tangent.normalize();
+        }
+
+
+        this.moveSmart(
+            tangent,
+            delta,
+            this.getDifficultyMovementSpeed(
+                BOT_CONFIG.normalSpeed *
+                0.82
+            )
+        );
+
+
+        return true;
     }
 
 
@@ -5696,7 +5979,12 @@ export class BotAI {
 
 
     // ========================================================
-    // Grenade AI
+    // Grenade Tactical AI V2
+    //
+    // BOT 主动使用：
+    // - HE
+    // - Flash
+    // - Smoke
     // ========================================================
 
     tryThrowGrenade(
@@ -5705,85 +5993,468 @@ export class BotAI {
     ) {
 
         if (
-            distance < 8 ||
-            distance > 28
+            !targetPosition ||
+            !this.bot?.grenadeInventory
         ) {
             return;
         }
 
 
         if (
-            !this.bot
-                .grenadeInventory
-                .has(
-                    GRENADE_TYPE.HE
-                )
+            distance < 6 ||
+            distance > 30
         ) {
             return;
         }
 
 
         if (
-            !this
-                .grenadeDecisionCooldown
+            !this.grenadeDecisionCooldown
                 .tryTrigger()
         ) {
             return;
         }
 
 
+        const inventory =
+            this.bot.grenadeInventory;
+
+
+        const hasHE =
+            inventory.has(
+                GRENADE_TYPE.HE
+            );
+
+
+        const hasFlash =
+            inventory.has(
+                GRENADE_TYPE.FLASH
+            );
+
+
+        const hasSmoke =
+            inventory.has(
+                GRENADE_TYPE.SMOKE
+            );
+
+
         if (
-            !chance(
-                0.22
-            )
+            !hasHE &&
+            !hasFlash &&
+            !hasSmoke
         ) {
             return;
         }
 
 
         const origin =
-            this.bot
-                .getEyePosition();
+            this.bot.getEyePosition();
+
+
+        const smokeInfo =
+            grenadeSystem
+                .getSmokeObscuration(
+                    origin,
+                    targetPosition
+                );
+
+
+        const smokeBlocked =
+            Boolean(
+                smokeInfo.blocked
+            );
+
+
+        const weapon =
+            this.bot.inventory
+                ?.currentWeapon;
+
+
+        const lowHP =
+            this.shouldRetreat();
+
+
+        const reloading =
+            Boolean(
+                weapon?.isReloading
+            );
+
+
+        const role =
+            this.tacticalRole ||
+            BOT_TACTICAL_ROLE.ATTACK;
+
+
+        const personality =
+            this.bot.personality ||
+            "balanced";
+
+
+        let heScore = 0;
+
+        let flashScore = 0;
+
+        let smokeScore = 0;
+
+
+        // ----------------------------------------------------
+        // HE
+        // ----------------------------------------------------
+
+        if (
+            hasHE &&
+            !smokeBlocked &&
+            distance >= 8 &&
+            distance <= 24
+        ) {
+
+            heScore =
+                0.22;
+
+
+            if (
+                distance >= 11 &&
+                distance <= 19
+            ) {
+
+                heScore +=
+                    0.10;
+            }
+
+
+            if (
+                personality ===
+                "aggressive"
+            ) {
+
+                heScore +=
+                    0.08;
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // Flash
+        // ----------------------------------------------------
+
+        if (
+            hasFlash &&
+            distance >= 7 &&
+            distance <= 24
+        ) {
+
+            flashScore =
+                0.24;
+
+
+            if (
+                role ===
+                BOT_TACTICAL_ROLE.ATTACK
+            ) {
+
+                flashScore +=
+                    0.10;
+            }
+
+
+            if (
+                role ===
+                BOT_TACTICAL_ROLE.SUPPORT
+            ) {
+
+                flashScore +=
+                    0.07;
+            }
+
+
+            if (
+                personality ===
+                "aggressive"
+            ) {
+
+                flashScore +=
+                    0.06;
+            }
+
+
+            if (
+                smokeBlocked
+            ) {
+
+                flashScore *=
+                    0.35;
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // Smoke
+        // ----------------------------------------------------
+
+        if (
+            hasSmoke &&
+            !smokeBlocked &&
+            distance >= 8 &&
+            distance <= 28
+        ) {
+
+            smokeScore =
+                0.10;
+
+
+            if (lowHP) {
+
+                smokeScore +=
+                    0.28;
+            }
+
+
+            if (reloading) {
+
+                smokeScore +=
+                    0.22;
+            }
+
+
+            if (
+                role ===
+                BOT_TACTICAL_ROLE.HOLD
+            ) {
+
+                smokeScore +=
+                    0.12;
+            }
+
+
+            if (
+                role ===
+                BOT_TACTICAL_ROLE.SUPPORT
+            ) {
+
+                smokeScore +=
+                    0.10;
+            }
+
+
+            if (
+                personality ===
+                "defensive"
+            ) {
+
+                smokeScore +=
+                    0.10;
+            }
+        }
+
+
+        let selectedType =
+            null;
+
+        let selectedScore =
+            0;
+
+
+        const consider =
+            (
+                type,
+                score
+            ) => {
+
+                if (
+                    score >
+                    selectedScore
+                ) {
+
+                    selectedType =
+                        type;
+
+                    selectedScore =
+                        score;
+                }
+            };
+
+
+        consider(
+            GRENADE_TYPE.HE,
+            heScore
+        );
+
+
+        consider(
+            GRENADE_TYPE.FLASH,
+            flashScore
+        );
+
+
+        consider(
+            GRENADE_TYPE.SMOKE,
+            smokeScore
+        );
+
+
+        if (!selectedType) {
+            return;
+        }
+
+
+        if (
+            !chance(
+                clamp(
+                    selectedScore,
+                    0,
+                    0.58
+                )
+            )
+        ) {
+            return;
+        }
+
+
+        let aimPoint =
+            targetPosition.clone();
+
+
+        if (
+            selectedType ===
+            GRENADE_TYPE.SMOKE
+        ) {
+
+            aimPoint =
+                origin
+                    .clone()
+                    .lerp(
+                        targetPosition,
+                        randomRange(
+                            0.48,
+                            0.66
+                        )
+                    );
+
+
+            aimPoint.y =
+                targetPosition.y +
+                0.35;
+
+        } else if (
+            selectedType ===
+            GRENADE_TYPE.FLASH
+        ) {
+
+            aimPoint.y +=
+                randomRange(
+                    1.6,
+                    2.4
+                );
+
+        } else {
+
+            aimPoint.y +=
+                randomRange(
+                    0.7,
+                    1.2
+                );
+        }
 
 
         const direction =
-            targetPosition
+            aimPoint
                 .clone()
-                .add(
-                    new THREE.Vector3(
-                        0,
-                        1.2,
-                        0
-                    )
-                )
                 .sub(
                     origin
-                )
-                .normalize();
+                );
 
 
-        grenadeSystem
-            .throwFromInventory({
-                inventory:
-                    this.bot
-                        .grenadeInventory,
+        if (
+            direction.lengthSq() <
+            0.0001
+        ) {
+            return;
+        }
 
-                type:
-                    GRENADE_TYPE.HE,
 
-                owner:
+        direction.normalize();
+
+
+        const grenade =
+            grenadeSystem
+                .throwFromInventory({
+                    inventory,
+
+                    type:
+                        selectedType,
+
+                    owner:
+                        this.bot,
+
+                    origin,
+
+                    direction,
+
+                    strength:
+                        selectedType ===
+                            GRENADE_TYPE.SMOKE
+                            ? randomRange(
+                                0.78,
+                                0.92
+                            )
+                            : selectedType ===
+                                GRENADE_TYPE.FLASH
+                                ? randomRange(
+                                    0.86,
+                                    1.00
+                                )
+                                : randomRange(
+                                    0.84,
+                                    1.00
+                                )
+                });
+
+
+        if (!grenade) {
+            return;
+        }
+
+
+        if (
+            selectedType ===
+            GRENADE_TYPE.SMOKE
+        ) {
+
+            this.smokeHoldTimer =
+                Math.max(
+                    this.smokeHoldTimer,
+                    randomRange(
+                        0.65,
+                        1.15
+                    )
+                );
+        }
+
+
+        gameEvents.emit(
+            "bot:grenade-tactical",
+            {
+                bot:
                     this.bot,
 
-                origin,
+                type:
+                    selectedType,
 
-                direction,
+                target:
+                    this.target,
 
-                strength:
-                    randomRange(
-                        0.85,
-                        1
-                    )
-            });
+                distance,
+
+                score:
+                    selectedScore,
+
+                role,
+
+                lowHP,
+
+                reloading
+            }
+        );
     }
 
 
@@ -6063,12 +6734,46 @@ export class BotAI {
     // Smoke Grenade V1
     // ========================================================
 
-    if (
+    const smokeInfo =
         grenadeSystem
-            .isLineBlockedBySmoke(
+            .getSmokeObscuration(
                 origin,
                 targetPosition
-            )
+            );
+
+
+    /*
+     * Smoke AI V2 - Close Range Perception
+     *
+     * 完整烟雾会阻断中远距离视觉；
+     * 但目标已经贴到约 3.2m 内时，
+     * BOT 可以获得有限近距离感知，
+     * 避免两个人在同一团烟里完全“互相不存在”。
+     */
+    const closeSmokeVisionDistance =
+        3.2;
+
+
+    if (
+        smokeInfo.blocked &&
+        distance >
+            closeSmokeVisionDistance
+    ) {
+
+        return false;
+    }
+
+
+    /*
+     * 近距离也不是无视烟雾。
+     * 如果穿过的是非常厚的烟，
+     * 仍然要求距离更近才允许感知。
+     */
+    if (
+        smokeInfo.obscuration >=
+            4.0 &&
+        distance >
+            1.85
     ) {
 
         return false;
@@ -6266,6 +6971,13 @@ export class BotAI {
     leaveCombat() {
 
         this.clearNavigationPath();
+
+
+        this.smokeHoldTimer =
+            0;
+
+        this.smokeLastBlockedPosition =
+            null;
 
 
         this.target = null;

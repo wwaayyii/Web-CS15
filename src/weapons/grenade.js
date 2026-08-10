@@ -2444,7 +2444,7 @@ export class GrenadeSystem {
     }
 
 
-    isLineBlockedBySmoke(
+    getSmokeObscuration(
         start,
         end
     ) {
@@ -2454,8 +2454,30 @@ export class GrenadeSystem {
             !end?.isVector3
         ) {
 
-            return false;
+            return {
+                blocked:
+                    false,
+
+                obscuration:
+                    0,
+
+                insideLength:
+                    0,
+
+                zone:
+                    null
+            };
         }
+
+
+        let bestZone =
+            null;
+
+        let bestObscuration =
+            0;
+
+        let bestInsideLength =
+            0;
 
 
         for (
@@ -2464,12 +2486,11 @@ export class GrenadeSystem {
         ) {
 
             /*
-             * 烟刚开始生成或快消散时，
-             * 不立刻完全阻断 BOT 视线。
+             * 刚起烟 / 快散完时不当成完整烟墙。
              */
             if (
                 zone.density <
-                0.35
+                0.22
             ) {
 
                 continue;
@@ -2494,17 +2515,113 @@ export class GrenadeSystem {
                 );
 
 
-            /*
-             * 穿烟长度 × 当前密度达到阈值，
-             * 才认为真正看不见。
-             *
-             * 这样 BOT 在烟雾边缘不会频繁
-             * “看见/看不见/看见”。
-             */
             if (
+                insideLength <=
+                0
+            ) {
+
+                continue;
+            }
+
+
+            const obscuration =
                 insideLength *
-                    zone.density >=
-                1.55
+                zone.density;
+
+
+            if (
+                obscuration >
+                bestObscuration
+            ) {
+
+                bestZone =
+                    zone;
+
+                bestObscuration =
+                    obscuration;
+
+                bestInsideLength =
+                    insideLength;
+            }
+        }
+
+
+        return {
+            blocked:
+                bestObscuration >=
+                1.55,
+
+            obscuration:
+                bestObscuration,
+
+            insideLength:
+                bestInsideLength,
+
+            zone:
+                bestZone
+        };
+    }
+
+
+    isLineBlockedBySmoke(
+        start,
+        end
+    ) {
+
+        return this
+            .getSmokeObscuration(
+                start,
+                end
+            )
+            .blocked;
+    }
+
+
+    isPointInsideSmoke(
+        position,
+        {
+            densityThreshold = 0.35,
+            radiusScale = 1
+        } = {}
+    ) {
+
+        if (
+            !position?.isVector3
+        ) {
+
+            return false;
+        }
+
+
+        for (
+            const zone
+            of this.smokeZones
+        ) {
+
+            if (
+                zone.density <
+                densityThreshold
+            ) {
+
+                continue;
+            }
+
+
+            const effectiveRadius =
+                zone.radius *
+                clamp(
+                    radiusScale,
+                    0.25,
+                    1.25
+                );
+
+
+            if (
+                position.distanceToSquared(
+                    zone.position
+                ) <=
+                effectiveRadius *
+                    effectiveRadius
             ) {
 
                 return true;
@@ -2513,6 +2630,24 @@ export class GrenadeSystem {
 
 
         return false;
+    }
+
+
+    getBlockingSmokeZone(
+        start,
+        end
+    ) {
+
+        const result =
+            this.getSmokeObscuration(
+                start,
+                end
+            );
+
+
+        return result.blocked
+            ? result.zone
+            : null;
     }
 
 
