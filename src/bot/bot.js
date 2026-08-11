@@ -266,8 +266,19 @@ export class Bot {
         this.savedRoundInventory =
             null;
 
+        this.savedRoundGrenades =
+            null;
+
         this.survivedLastRound =
             false;
+
+
+        /*
+         * BotAIManager 创建 AI 后会覆盖这个值。
+         * 这里保留一个安全默认值，避免 Bot 反向依赖 botAI.js。
+         */
+        this.tacticalRole =
+            "attack";
 
 
         // ====================================================
@@ -325,6 +336,30 @@ export class Bot {
 
 
         // ====================================================
+        // BOT Grenade Throw Animation V1
+        // ====================================================
+
+        this.isThrowingGrenade = false;
+
+        this.grenadeThrowType = null;
+
+        this.grenadeThrowTime = 0;
+
+        this.grenadeThrowDuration = 0.82;
+
+        this.grenadeThrowReleased = false;
+
+        this.grenadeViewModel = null;
+
+        this.grenadeThrowDirection =
+            new THREE.Vector3(
+                0,
+                0,
+                -1
+            );
+
+
+        // ====================================================
         // Create
         // ====================================================
 
@@ -333,6 +368,11 @@ export class Bot {
         this.createHPBar();
 
         this.setupDefaultLoadout();
+
+        this.setupGrenadeLoadout({
+            clearExisting:
+                true
+        });
 
 
         if (position) {
@@ -378,6 +418,152 @@ export class Bot {
                 equip: true
             }
         );
+    }
+
+
+
+    // ========================================================
+    // BOT Grenade Loadout V1
+    //
+    // ATTACK   -> HE + FLASH
+    // SUPPORT  -> FLASH + SMOKE
+    // HOLD     -> HE + SMOKE
+    // ========================================================
+
+    setupGrenadeLoadout({
+        clearExisting = true
+    } = {}) {
+
+        if (
+            !this.grenadeInventory
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            clearExisting
+        ) {
+
+            this.grenadeInventory
+                .clear();
+        }
+
+
+        const role =
+            this.tacticalRole ||
+            "attack";
+
+
+        if (
+            role ===
+            "support"
+        ) {
+
+            this.addGrenade(
+                GRENADE_TYPE.FLASH,
+                1
+            );
+
+
+            this.addGrenade(
+                GRENADE_TYPE.SMOKE,
+                1
+            );
+
+        } else if (
+            role ===
+            "hold"
+        ) {
+
+            this.addGrenade(
+                GRENADE_TYPE.HE,
+                1
+            );
+
+
+            this.addGrenade(
+                GRENADE_TYPE.SMOKE,
+                1
+            );
+
+        } else {
+
+            this.addGrenade(
+                GRENADE_TYPE.HE,
+                1
+            );
+
+
+            this.addGrenade(
+                GRENADE_TYPE.FLASH,
+                1
+            );
+        }
+
+
+        gameEvents.emit(
+            "bot:grenade-loadout",
+            {
+                bot:
+                    this,
+
+                role,
+
+                grenades:
+                    this.grenadeInventory
+                        .serialize()
+            }
+        );
+
+
+        return true;
+    }
+
+
+    setTacticalRole(
+        role,
+        {
+            refreshGrenades = false
+        } = {}
+    ) {
+
+        const normalized =
+            (
+                role === "support" ||
+                role === "hold"
+            )
+                ? role
+                : "attack";
+
+
+        this.tacticalRole =
+            normalized;
+
+
+        if (
+            this.group
+        ) {
+
+            this.group.userData
+                .tacticalRole =
+                normalized;
+        }
+
+
+        if (
+            refreshGrenades
+        ) {
+
+            this.setupGrenadeLoadout({
+                clearExisting:
+                    true
+            });
+        }
+
+
+        return this.tacticalRole;
     }
 
 
@@ -831,6 +1017,38 @@ export class Bot {
 
         torso.add(
             rifleHolder
+        );
+
+
+        // ====================================================
+        // Grenade Holder
+        // ====================================================
+
+        const grenadeHolder =
+            new THREE.Group();
+
+
+        grenadeHolder.name =
+            "BOT_GRENADE_HOLDER";
+
+
+        grenadeHolder.position.set(
+            0.50,
+            0.06,
+            -0.20
+        );
+
+
+        grenadeHolder.visible =
+            false;
+
+
+        this.bodyParts.grenadeHolder =
+            grenadeHolder;
+
+
+        torso.add(
+            grenadeHolder
         );
 
 
@@ -1563,9 +1781,18 @@ export class Bot {
             this.isAlive
         ) {
 
-            this.updateWalkAnimation(
-                delta
-            );
+            if (
+                this.isThrowingGrenade
+            ) {
+
+                this.stopMoving();
+
+            } else {
+
+                this.updateWalkAnimation(
+                    delta
+                );
+            }
         }
     }
 
@@ -1623,6 +1850,539 @@ export class Bot {
         this.bodyParts.rightLeg
             .rotation.x =
             -swing;
+    }
+
+
+    // ========================================================
+    // BOT Grenade Throw Animation V1
+    // ========================================================
+
+    createGrenadeViewModel(type) {
+
+        const holder =
+            this.bodyParts.grenadeHolder;
+
+
+        if (!holder) {
+            return null;
+        }
+
+
+        while (
+            holder.children.length > 0
+        ) {
+
+            const child =
+                holder.children[0];
+
+
+            holder.remove(child);
+
+
+            child.geometry
+                ?.dispose?.();
+
+
+            if (
+                Array.isArray(
+                    child.material
+                )
+            ) {
+
+                child.material.forEach(
+                    material =>
+                        material?.dispose?.()
+                );
+
+            } else {
+
+                child.material
+                    ?.dispose?.();
+            }
+        }
+
+
+        let geometry = null;
+
+        let color =
+            0x394331;
+
+
+        if (
+            type ===
+            GRENADE_TYPE.FLASH
+        ) {
+
+            geometry =
+                new THREE.CylinderGeometry(
+                    0.10,
+                    0.10,
+                    0.30,
+                    10
+                );
+
+
+            geometry.rotateX(
+                Math.PI / 2
+            );
+
+
+            color =
+                0xbfc2c3;
+
+        } else if (
+            type ===
+            GRENADE_TYPE.SMOKE
+        ) {
+
+            geometry =
+                new THREE.CylinderGeometry(
+                    0.11,
+                    0.11,
+                    0.34,
+                    10
+                );
+
+
+            geometry.rotateX(
+                Math.PI / 2
+            );
+
+
+            color =
+                0x4f5c4b;
+
+        } else {
+
+            geometry =
+                new THREE.SphereGeometry(
+                    0.13,
+                    10,
+                    8
+                );
+        }
+
+
+        const material =
+            new THREE.MeshStandardMaterial({
+                color,
+
+                roughness:
+                    0.55,
+
+                metalness:
+                    type ===
+                        GRENADE_TYPE.FLASH
+                        ? 0.45
+                        : 0.15
+            });
+
+
+        const mesh =
+            new THREE.Mesh(
+                geometry,
+                material
+            );
+
+
+        mesh.userData.ignoreHitbox =
+            true;
+
+
+        holder.add(mesh);
+
+
+        this.grenadeViewModel =
+            mesh;
+
+
+        return mesh;
+    }
+
+
+    beginGrenadeThrowAnimation(
+        type,
+        direction
+    ) {
+
+        if (
+            this.isThrowingGrenade ||
+            !this.isAlive
+        ) {
+            return false;
+        }
+
+
+        this.isThrowingGrenade =
+            true;
+
+        this.grenadeThrowType =
+            type;
+
+        this.grenadeThrowTime =
+            0;
+
+        this.grenadeThrowReleased =
+            false;
+
+
+        if (
+            direction?.isVector3 &&
+            direction.lengthSq() >
+                0.0001
+        ) {
+
+            this.grenadeThrowDirection
+                .copy(direction)
+                .normalize();
+        }
+
+
+        this.inventory
+            .currentWeapon
+            ?.releaseTrigger?.();
+
+
+        this.stopMoving();
+
+        this.setCrouching(false);
+
+        this.createGrenadeViewModel(type);
+
+
+        if (
+            this.bodyParts.grenadeHolder
+        ) {
+
+            this.bodyParts
+                .grenadeHolder
+                .visible =
+                true;
+        }
+
+
+        if (
+            this.bodyParts.rifleHolder
+        ) {
+
+            this.bodyParts
+                .rifleHolder
+                .visible =
+                false;
+        }
+
+
+        return true;
+    }
+
+
+    getGrenadeReleasePosition() {
+
+        const holder =
+            this.bodyParts.grenadeHolder;
+
+
+        if (!holder) {
+
+            return this.getEyePosition();
+        }
+
+
+        const position =
+            new THREE.Vector3();
+
+
+        holder.getWorldPosition(
+            position
+        );
+
+
+        position.addScaledVector(
+            this.grenadeThrowDirection,
+            0.28
+        );
+
+
+        position.y +=
+            0.08;
+
+
+        return position;
+    }
+
+
+    updateGrenadeThrowAnimation(delta) {
+
+        if (
+            !this.isThrowingGrenade
+        ) {
+
+            return {
+                active: false,
+                releaseNow: false
+            };
+        }
+
+
+        this.grenadeThrowTime +=
+            delta;
+
+
+        const t =
+            clamp(
+                this.grenadeThrowTime /
+                this.grenadeThrowDuration,
+                0,
+                1
+            );
+
+
+        const rightArm =
+            this.bodyParts.rightArm;
+
+
+        const leftArm =
+            this.bodyParts.leftArm;
+
+
+        const holder =
+            this.bodyParts.grenadeHolder;
+
+
+        if (
+            rightArm &&
+            leftArm
+        ) {
+
+            if (
+                t < 0.34
+            ) {
+
+                const p =
+                    t / 0.34;
+
+
+                rightArm.rotation.x =
+                    -1.30 -
+                    p * 0.72;
+
+
+                rightArm.rotation.z =
+                    0.20 +
+                    p * 0.18;
+
+
+                leftArm.rotation.x =
+                    -1.30 +
+                    p * 0.18;
+
+
+                if (holder) {
+
+                    holder.position.z =
+                        -0.20 +
+                        p * 0.14;
+
+
+                    holder.position.y =
+                        0.06 +
+                        p * 0.10;
+                }
+
+            } else if (
+                t < 0.68
+            ) {
+
+                const p =
+                    (
+                        t - 0.34
+                    ) /
+                    0.34;
+
+
+                rightArm.rotation.x =
+                    -2.02 +
+                    p * 1.88;
+
+
+                rightArm.rotation.z =
+                    0.38 -
+                    p * 0.22;
+
+
+                leftArm.rotation.x =
+                    -1.12 -
+                    p * 0.18;
+
+
+                if (holder) {
+
+                    holder.position.z =
+                        -0.06 -
+                        p * 0.42;
+
+
+                    holder.position.y =
+                        0.16 +
+                        p * 0.04;
+                }
+
+            } else {
+
+                const p =
+                    (
+                        t - 0.68
+                    ) /
+                    0.32;
+
+
+                rightArm.rotation.x =
+                    0.10 -
+                    p * 1.40;
+
+
+                rightArm.rotation.z =
+                    0.16 +
+                    p * 0.04;
+
+
+                leftArm.rotation.x =
+                    -1.30;
+
+
+                if (holder) {
+
+                    holder.position.z =
+                        -0.48 +
+                        p * 0.28;
+
+
+                    holder.position.y =
+                        0.20 -
+                        p * 0.14;
+                }
+            }
+        }
+
+
+        let releaseNow =
+            false;
+
+
+        if (
+            !this.grenadeThrowReleased &&
+            t >= 0.58
+        ) {
+
+            this.grenadeThrowReleased =
+                true;
+
+
+            releaseNow =
+                true;
+
+
+            if (holder) {
+
+                holder.visible =
+                    false;
+            }
+        }
+
+
+        if (
+            t >= 1
+        ) {
+
+            this.finishGrenadeThrowAnimation();
+        }
+
+
+        return {
+            active:
+                this.isThrowingGrenade,
+
+            releaseNow
+        };
+    }
+
+
+    finishGrenadeThrowAnimation() {
+
+        this.isThrowingGrenade =
+            false;
+
+        this.grenadeThrowType =
+            null;
+
+        this.grenadeThrowTime =
+            0;
+
+        this.grenadeThrowReleased =
+            false;
+
+
+        const holder =
+            this.bodyParts.grenadeHolder;
+
+
+        if (holder) {
+
+            holder.visible =
+                false;
+
+
+            holder.position.set(
+                0.50,
+                0.06,
+                -0.20
+            );
+        }
+
+
+        if (
+            this.bodyParts.rifleHolder
+        ) {
+
+            this.bodyParts
+                .rifleHolder
+                .visible =
+                true;
+        }
+
+
+        if (
+            this.bodyParts.rightArm
+        ) {
+
+            this.bodyParts
+                .rightArm
+                .rotation.x =
+                -1.30;
+
+
+            this.bodyParts
+                .rightArm
+                .rotation.z =
+                0.20;
+        }
+
+
+        if (
+            this.bodyParts.leftArm
+        ) {
+
+            this.bodyParts
+                .leftArm
+                .rotation.x =
+                -1.30;
+
+
+            this.bodyParts
+                .leftArm
+                .rotation.z =
+                -0.20;
+        }
     }
 
 
@@ -2195,6 +2955,10 @@ export class Bot {
 
         this.stopMoving();
 
+
+        this.finishGrenadeThrowAnimation();
+
+
         this.currentTarget =
             null;
 
@@ -2358,9 +3122,18 @@ export class Bot {
                 this.inventory
                     .serialize();
 
+
+            this.savedRoundGrenades =
+                this.grenadeInventory
+                    .serialize();
+
         } else {
 
             this.savedRoundInventory =
+                null;
+
+
+            this.savedRoundGrenades =
                 null;
         }
     }
@@ -2426,6 +3199,10 @@ export class Bot {
         this.currentTarget =
             null;
 
+
+        this.finishGrenadeThrowAnimation();
+
+
         this.lastKnownEnemyPosition =
             null;
 
@@ -2487,11 +3264,18 @@ export class Bot {
 
 
         // ====================================================
-        // 生存保枪
+        // 生存保枪 / 保留剩余手雷
         // ====================================================
 
+        const preserveRoundLoadout =
+            Boolean(
+                preserveWeapons &&
+                this.survivedLastRound
+            );
+
+
         if (
-            preserveWeapons &&
+            preserveRoundLoadout &&
             this.savedRoundInventory
         ) {
 
@@ -2502,6 +3286,29 @@ export class Bot {
         } else {
 
             this.setupDefaultLoadout();
+        }
+
+
+        if (
+            preserveRoundLoadout &&
+            this.savedRoundGrenades
+        ) {
+
+            this.grenadeInventory
+                .restore(
+                    this.savedRoundGrenades
+                );
+
+        } else {
+
+            /*
+             * 上一回合死亡 / 新比赛：
+             * 根据 Tactical Role 发放新的手雷组合。
+             */
+            this.setupGrenadeLoadout({
+                clearExisting:
+                    true
+            });
         }
 
 
@@ -2559,6 +3366,9 @@ export class Bot {
         this.savedRoundInventory =
             null;
 
+        this.savedRoundGrenades =
+            null;
+
         this.survivedLastRound =
             false;
 
@@ -2567,6 +3377,11 @@ export class Bot {
 
 
         this.setupDefaultLoadout();
+
+        this.setupGrenadeLoadout({
+            clearExisting:
+                true
+        });
 
 
         this.spawn({
@@ -2598,6 +3413,9 @@ export class Bot {
             personality:
                 this.personality,
 
+            tacticalRole:
+                this.tacticalRole,
+
             kills:
                 this.kills,
 
@@ -2619,7 +3437,13 @@ export class Bot {
 
             grenades:
                 this.grenadeInventory
-                    .serialize()
+                    .serialize(),
+
+            throwingGrenade:
+                this.isThrowingGrenade,
+
+            grenadeThrowType:
+                this.grenadeThrowType
         };
     }
 
@@ -2664,6 +3488,16 @@ export class Bot {
 
             this.personality =
                 profile.personality;
+        }
+
+
+        if (
+            profile.tacticalRole
+        ) {
+
+            this.setTacticalRole(
+                profile.tacticalRole
+            );
         }
 
 
@@ -2740,6 +3574,9 @@ export class Bot {
 
             personality:
                 this.personality,
+
+            tacticalRole:
+                this.tacticalRole,
 
             hp:
                 this.hp,

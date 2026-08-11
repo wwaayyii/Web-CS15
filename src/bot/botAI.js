@@ -539,6 +539,11 @@ export class BotAI {
             );
 
 
+        // BOT Grenade Throw Animation V1
+        this.pendingGrenadeThrow =
+            null;
+
+
 		// ====================================================
 		// Shooting
 		// ====================================================
@@ -1041,6 +1046,20 @@ export class BotAI {
         ) {
 
             this.updateBlindState(
+                delta
+            );
+
+            return;
+        }
+
+
+        if (
+            this.updatePendingGrenadeThrow(
+                delta
+            )
+        ) {
+
+            this.updateAim(
                 delta
             );
 
@@ -4519,6 +4538,15 @@ export class BotAI {
 
 	tryFire(distance) {
 
+        if (
+            this.pendingGrenadeThrow ||
+            this.bot.isThrowingGrenade
+        ) {
+
+            return;
+        }
+
+
 		const weapon =
 			this.bot
 				.inventory
@@ -6070,8 +6098,20 @@ export class BotAI {
                 ?.currentWeapon;
 
 
+        const personalityConfig =
+            BOT_CONFIG
+                .personalities[
+                    this.bot.personality
+                ] ||
+            BOT_CONFIG
+                .personalities
+                .balanced;
+
+
         const lowHP =
-            this.shouldRetreat();
+            this.bot.hp <
+            personalityConfig
+                .retreatThreshold;
 
 
         const reloading =
@@ -6375,60 +6415,80 @@ export class BotAI {
         direction.normalize();
 
 
-        const grenade =
-            grenadeSystem
-                .throwFromInventory({
-                    inventory,
-
-                    type:
-                        selectedType,
-
-                    owner:
-                        this.bot,
-
-                    origin,
-
-                    direction,
-
-                    strength:
-                        selectedType ===
-                            GRENADE_TYPE.SMOKE
-                            ? randomRange(
-                                0.78,
-                                0.92
-                            )
-                            : selectedType ===
-                                GRENADE_TYPE.FLASH
-                                ? randomRange(
-                                    0.86,
-                                    1.00
-                                )
-                                : randomRange(
-                                    0.84,
-                                    1.00
-                                )
-                });
-
-
-        if (!grenade) {
+        if (
+            this.pendingGrenadeThrow ||
+            this.bot.isThrowingGrenade
+        ) {
             return;
         }
 
 
-        if (
+        const strength =
             selectedType ===
-            GRENADE_TYPE.SMOKE
-        ) {
-
-            this.smokeHoldTimer =
-                Math.max(
-                    this.smokeHoldTimer,
-                    randomRange(
-                        0.65,
-                        1.15
+                GRENADE_TYPE.SMOKE
+                ? randomRange(
+                    0.78,
+                    0.92
+                )
+                : selectedType ===
+                    GRENADE_TYPE.FLASH
+                    ? randomRange(
+                        0.86,
+                        1.00
                     )
+                    : randomRange(
+                        0.84,
+                        1.00
+                    );
+
+
+        this.pendingGrenadeThrow = {
+            type:
+                selectedType,
+
+            direction:
+                direction.clone(),
+
+            strength,
+
+            targetPosition:
+                targetPosition.clone(),
+
+            distance,
+
+            score:
+                selectedScore,
+
+            role,
+
+            lowHP,
+
+            reloading
+        };
+
+
+        const started =
+            this.bot
+                .beginGrenadeThrowAnimation(
+                    selectedType,
+                    direction
                 );
+
+
+        if (!started) {
+
+            this.pendingGrenadeThrow =
+                null;
+
+            return;
         }
+
+
+        this.bot.stopMoving();
+
+
+        weapon
+            ?.releaseTrigger?.();
 
 
         gameEvents.emit(
@@ -6452,9 +6512,175 @@ export class BotAI {
 
                 lowHP,
 
-                reloading
+                reloading,
+
+                phase:
+                    "prepare"
             }
         );
+    }
+
+
+    // ========================================================
+    // BOT Grenade Throw Animation V1
+    // ========================================================
+
+    updatePendingGrenadeThrow(delta) {
+
+        const pending =
+            this.pendingGrenadeThrow;
+
+
+        if (!pending) {
+
+            return false;
+        }
+
+
+        if (
+            !this.bot.isAlive
+        ) {
+
+            this.pendingGrenadeThrow =
+                null;
+
+
+            this.bot
+                .finishGrenadeThrowAnimation?.();
+
+
+            return false;
+        }
+
+
+        this.bot.stopMoving();
+
+
+        const faceTarget =
+            this.bot
+                .getPosition()
+                .clone()
+                .addScaledVector(
+                    pending.direction,
+                    8
+                );
+
+
+        this.bot.facePositionSmooth(
+            faceTarget,
+            delta,
+            12
+        );
+
+
+        this.desiredAimDirection
+            .copy(
+                pending.direction
+            );
+
+
+        const animation =
+            this.bot
+                .updateGrenadeThrowAnimation(
+                    delta
+                );
+
+
+        if (
+            animation?.releaseNow
+        ) {
+
+            const origin =
+                this.bot
+                    .getGrenadeReleasePosition();
+
+
+            const grenade =
+                grenadeSystem
+                    .throwFromInventory({
+                        inventory:
+                            this.bot
+                                .grenadeInventory,
+
+                        type:
+                            pending.type,
+
+                        owner:
+                            this.bot,
+
+                        origin,
+
+                        direction:
+                            pending.direction,
+
+                        strength:
+                            pending.strength
+                    });
+
+
+            if (
+                grenade &&
+                pending.type ===
+                    GRENADE_TYPE.SMOKE
+            ) {
+
+                this.smokeHoldTimer =
+                    Math.max(
+                        this.smokeHoldTimer,
+                        randomRange(
+                            0.65,
+                            1.15
+                        )
+                    );
+            }
+
+
+            gameEvents.emit(
+                "bot:grenade-tactical",
+                {
+                    bot:
+                        this.bot,
+
+                    type:
+                        pending.type,
+
+                    target:
+                        this.target,
+
+                    distance:
+                        pending.distance,
+
+                    score:
+                        pending.score,
+
+                    role:
+                        pending.role,
+
+                    lowHP:
+                        pending.lowHP,
+
+                    reloading:
+                        pending.reloading,
+
+                    phase:
+                        "release",
+
+                    grenade
+                }
+            );
+        }
+
+
+        if (
+            !this.bot.isThrowingGrenade
+        ) {
+
+            this.pendingGrenadeThrow =
+                null;
+        }
+
+
+        return true;
     }
 
 
@@ -8170,6 +8396,9 @@ export class BotAI {
         this.navigationMap = null;
 
         this.escapePoint = null;
+
+        this.pendingGrenadeThrow =
+            null;
     }
 }
 
@@ -8375,17 +8604,38 @@ export class BotAIManager {
         );
 
 
-        bot.tacticalRole =
-            tacticalRole;
-
-
         if (
-            bot.group
+            typeof bot.setTacticalRole ===
+            "function"
         ) {
 
-            bot.group.userData
-                .tacticalRole =
+            /*
+             * BOT 构造时只能使用默认 attack 角色。
+             * AI Manager 现在拿到了真实角色，
+             * 因此这里同步角色并刷新第一回合手雷组合。
+             */
+            bot.setTacticalRole(
+                tacticalRole,
+                {
+                    refreshGrenades:
+                        true
+                }
+            );
+
+        } else {
+
+            bot.tacticalRole =
                 tacticalRole;
+
+
+            if (
+                bot.group
+            ) {
+
+                bot.group.userData
+                    .tacticalRole =
+                    tacticalRole;
+            }
         }
 
 

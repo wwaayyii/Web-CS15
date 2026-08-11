@@ -96,7 +96,9 @@ export class HUDSystem {
 
             grenadeIndicator: null,
 
-            flashOverlay: null
+            flashOverlay: null,
+
+            sniperScope: null
         };
 
 
@@ -297,6 +299,11 @@ export class HUDSystem {
         );
 
 
+        this.createSniperScopeOverlay(
+            root
+        );
+
+
         this._bindEvents();
 
 
@@ -371,6 +378,10 @@ export class HUDSystem {
 
                 this.hideSpectator();
 
+                this.setSniperScope(
+                    false
+                );
+
                 this.refreshPlayer();
 
                 this.refreshWeapon();
@@ -425,6 +436,11 @@ export class HUDSystem {
 
                 this.updateHP(
                     0
+                );
+
+
+                this.setSniperScope(
+                    false
                 );
 
 
@@ -1530,6 +1546,143 @@ export class HUDSystem {
             count <= 0
                 ? "0.55"
                 : "1";
+    }
+
+
+    // ========================================================
+    // Sniper Scope V1
+    // ========================================================
+
+    createSniperScopeOverlay(
+        root = document
+    ) {
+
+        let overlay =
+            root.getElementById(
+                "sniper-scope-overlay"
+            );
+
+
+        if (!overlay) {
+
+            overlay =
+                document.createElement(
+                    "div"
+                );
+
+
+            overlay.id =
+                "sniper-scope-overlay";
+
+            overlay.className =
+                "sniper-scope-overlay";
+
+
+            overlay.innerHTML = `
+                <div class="sniper-scope-ring"></div>
+                <div class="sniper-scope-line sniper-scope-line-horizontal"></div>
+                <div class="sniper-scope-line sniper-scope-line-vertical"></div>
+                <div class="sniper-scope-center-dot"></div>
+            `;
+
+
+            document.body.appendChild(
+                overlay
+            );
+        }
+
+
+        this.elements.sniperScope =
+            overlay;
+
+
+        this.setSniperScope(
+            false
+        );
+    }
+
+
+    setSniperScope(
+        active
+    ) {
+
+        active =
+            Boolean(
+                active
+            );
+
+
+        const overlay =
+            this.elements
+                .sniperScope;
+
+
+        if (overlay) {
+
+            overlay.style.display =
+                active
+                    ? "block"
+                    : "none";
+
+
+            overlay.dataset.active =
+                active
+                    ? "true"
+                    : "false";
+        }
+
+
+        /*
+         * 开镜时隐藏普通动态准心。
+         * 退出 Scope 后恢复。
+         */
+        if (
+            this.elements
+                .crosshair
+        ) {
+
+            this.elements
+                .crosshair
+                .style
+                .visibility =
+                active
+                    ? "hidden"
+                    : "visible";
+        }
+
+
+        /*
+         * 手雷提示也属于普通 HUD，
+         * 开镜时暂时隐藏，避免出现在黑色 Scope 上。
+         */
+        if (
+            this.elements
+                .grenadeIndicator
+        ) {
+
+            this.elements
+                .grenadeIndicator
+                .style
+                .visibility =
+                active
+                    ? "hidden"
+                    : "visible";
+        }
+
+
+        return active;
+    }
+
+
+    isSniperScopeVisible() {
+
+        return (
+            this.elements
+                .sniperScope
+                ?.dataset
+                ?.active ===
+            "true"
+        );
     }
 
 
@@ -2954,6 +3107,31 @@ export class HUDSystem {
     // ========================================================
 
     destroy() {
+
+        this.setSniperScope(
+            false
+        );
+
+
+        if (
+            this.elements
+                .sniperScope
+                ?.parentNode
+        ) {
+
+            this.elements
+                .sniperScope
+                .parentNode
+                .removeChild(
+                    this.elements
+                        .sniperScope
+                );
+        }
+
+
+        this.elements.sniperScope =
+            null;
+
 
         gameEvents.off(
             GAME_EVENT.PLAYER_SPAWN,

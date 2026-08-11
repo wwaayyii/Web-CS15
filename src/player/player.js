@@ -223,6 +223,17 @@ export class Player {
 
 
         // ====================================================
+        // Sniper Scope V2
+        // 0 = Normal
+        // 1 = First Zoom
+        // 2 = Second Zoom
+        // ====================================================
+
+        this.sniperScopeLevel =
+            0;
+
+
+        // ====================================================
         // Movement
         // ====================================================
 
@@ -301,6 +312,13 @@ export class Player {
 
         this.selectedGrenadeType =
             GRENADE_TYPE.HE;
+
+
+        this.grenadeMode =
+            false;
+
+        this.grenadePrimeHeld =
+            false;
 
 
         // ====================================================
@@ -1339,6 +1357,42 @@ export class Player {
 
 
     // ========================================================
+    // Sniper Scope V2
+    // ========================================================
+
+    setSniperScopeLevel(
+        level = 0
+    ) {
+
+        this.sniperScopeLevel =
+            clamp(
+                Math.floor(
+                    Number(level) ||
+                    0
+                ),
+                0,
+                2
+            );
+
+
+        this.inventory
+            .currentWeapon
+            ?.setScopeLevel?.(
+                this.sniperScopeLevel
+            );
+
+
+        return this.sniperScopeLevel;
+    }
+
+
+    getSniperScopeLevel() {
+
+        return this.sniperScopeLevel;
+    }
+
+
+    // ========================================================
     // Shooting
     // ========================================================
 
@@ -1396,7 +1450,10 @@ export class Player {
                         this.crouchAccuracyMultiplier,
 
                     airborne:
-                        !this.isGrounded
+                        !this.isGrounded,
+
+                    scopeLevel:
+                        this.sniperScopeLevel
                 }
             );
 
@@ -1424,43 +1481,64 @@ export class Player {
 
     startFire() {
 
-        if (
-            !this.isAlive
-        ) {
-            return;
-        }
+		/*
+		 * 手雷模式下绝对不能开枪。
+		 *
+		 * 左键由 game.js 转交给
+		 * beginGrenadePrime()。
+		 */
+		if (
+			!this.isAlive ||
+			!this.controlsEnabled ||
+			this.grenadeMode
+		) {
+			return;
+		}
 
 
-        this.input.fire =
-            true;
+		this.input.fire =
+			true;
 
 
-        const weapon =
-            this.inventory
-                .currentWeapon;
+		const weapon =
+			this.inventory
+				.currentWeapon;
 
 
-        weapon
-            ?.pressTrigger();
+		weapon
+			?.pressTrigger();
 
 
-        /*
-         * 第一发立即打。
-         */
-        this.shoot();
-    }
+		/*
+		 * 第一发立即打。
+		 */
+		this.shoot();
+	}
 
 
-    stopFire() {
+	stopFire() {
 
-        this.input.fire =
-            false;
+		/*
+		 * stopFire 只负责停止枪械射击。
+		 *
+		 * 重要：
+		 * 这里绝对不能修改：
+		 *
+		 * this.grenadeMode
+		 * this.grenadePrimeHeld
+		 *
+		 * 因为 beginGrenadePrime()
+		 * 本身会调用 stopFire()，
+		 * 用于确保切换到手雷时枪械停止射击。
+		 */
+		this.input.fire =
+			false;
 
 
-        this.inventory
-            .currentWeapon
-            ?.releaseTrigger();
-    }
+		this.inventory
+			.currentWeapon
+			?.releaseTrigger();
+	}
 
 
     // ========================================================
@@ -1520,6 +1598,16 @@ export class Player {
 
     equipPrimary() {
 
+        this.exitGrenadeMode({
+            restoreWeapon: false
+        });
+
+
+        this.setSniperScopeLevel(
+            0
+        );
+
+
         return this.inventory
             .equipSlot(
                 WEAPON_SLOT.PRIMARY
@@ -1528,6 +1616,16 @@ export class Player {
 
 
     equipSecondary() {
+
+        this.exitGrenadeMode({
+            restoreWeapon: false
+        });
+
+
+        this.setSniperScopeLevel(
+            0
+        );
+
 
         return this.inventory
             .equipSlot(
@@ -1538,6 +1636,16 @@ export class Player {
 
     equipKnife() {
 
+        this.exitGrenadeMode({
+            restoreWeapon: false
+        });
+
+
+        this.setSniperScopeLevel(
+            0
+        );
+
+
         return this.inventory
             .equipSlot(
                 WEAPON_SLOT.KNIFE
@@ -1546,6 +1654,16 @@ export class Player {
 
 
     switchLastWeapon() {
+
+        this.exitGrenadeMode({
+            restoreWeapon: false
+        });
+
+
+        this.setSniperScopeLevel(
+            0
+        );
+
 
         return this.inventory
             .switchLastWeapon();
@@ -1574,7 +1692,7 @@ export class Player {
 
 
     // ========================================================
-    // Grenade Inventory
+    // Grenade First Person V1
     // ========================================================
 
     addGrenade(
@@ -1582,8 +1700,7 @@ export class Player {
         amount = 1
     ) {
 
-        return this
-            .grenadeInventory
+        return this.grenadeInventory
             .add(
                 type,
                 amount
@@ -1591,20 +1708,34 @@ export class Player {
     }
 
 
+    getAvailableGrenadeTypes() {
+
+        return [
+            GRENADE_TYPE.HE,
+            GRENADE_TYPE.FLASH,
+            GRENADE_TYPE.SMOKE
+        ].filter(
+            type =>
+                this.grenadeInventory
+                    .has(type)
+        );
+    }
+
+
     selectGrenade(
-        type
+        type,
+        {
+            equipView = true
+        } = {}
     ) {
 
         if (
-            !Object
-                .values(
-                    GRENADE_TYPE
-                )
-                .includes(
-                    type
-                )
+            !Object.values(
+                GRENADE_TYPE
+            ).includes(type) ||
+            !this.grenadeInventory
+                .has(type)
         ) {
-
             return false;
         }
 
@@ -1613,13 +1744,19 @@ export class Player {
             type;
 
 
+        if (equipView) {
+
+            this.grenadeMode = true;
+        }
+
+
         gameEvents.emit(
             "grenade:selected",
             {
-                owner:
-                    this,
-
-                type
+                owner: this,
+                type,
+                equipped:
+                    this.grenadeMode
             }
         );
 
@@ -1628,63 +1765,223 @@ export class Player {
     }
 
 
-    // ========================================================
-    // Throw Grenade
-    // ========================================================
+    cycleGrenadeSlot() {
 
-    throwGrenade(
+        if (
+            !this.isAlive ||
+            !this.controlsEnabled ||
+            this.grenadePrimeHeld
+        ) {
+            return false;
+        }
+
+
+        const available =
+            this.getAvailableGrenadeTypes();
+
+
+        if (available.length === 0) {
+
+            this.exitGrenadeMode({
+                restoreWeapon: true
+            });
+
+            return false;
+        }
+
+
+        let nextType =
+            available[0];
+
+
+        if (this.grenadeMode) {
+
+            const index =
+                available.indexOf(
+                    this.selectedGrenadeType
+                );
+
+
+            if (index >= 0) {
+
+                nextType =
+                    available[
+                        (index + 1) %
+                        available.length
+                    ];
+            }
+        }
+
+
+        return this.selectGrenade(
+            nextType,
+            {
+                equipView: true
+            }
+        );
+    }
+
+
+    exitGrenadeMode({
+        restoreWeapon = true
+    } = {}) {
+
+        this.grenadeMode = false;
+
+        this.grenadePrimeHeld = false;
+
+
+        if (restoreWeapon) {
+
+            gameEvents.emit(
+                "grenade:holster",
+                {
+                    owner: this,
+                    type:
+                        this.selectedGrenadeType
+                }
+            );
+        }
+
+
+        return true;
+    }
+
+
+    beginGrenadePrime() {
+
+        if (
+            !this.isAlive ||
+            !this.controlsEnabled ||
+            !this.grenadeMode ||
+            !this.grenadeInventory
+                .has(
+                    this.selectedGrenadeType
+                )
+        ) {
+            return false;
+        }
+
+
+        this.stopFire();
+
+        this.grenadePrimeHeld = true;
+
+
+        gameEvents.emit(
+            "grenade:prime",
+            {
+                owner: this,
+                type:
+                    this.selectedGrenadeType
+            }
+        );
+
+
+        return true;
+    }
+
+
+    releaseGrenadePrime() {
+
+        if (
+            !this.grenadeMode ||
+            !this.grenadePrimeHeld
+        ) {
+            return false;
+        }
+
+
+        this.grenadePrimeHeld = false;
+
+
+        gameEvents.emit(
+            "grenade:release",
+            {
+                owner: this,
+                type:
+                    this.selectedGrenadeType
+            }
+        );
+
+
+        return true;
+    }
+
+
+    commitGrenadeThrow(
         type =
-            this
-                .selectedGrenadeType,
-
-        strength =
-            1
+            this.selectedGrenadeType,
+        strength = 1
     ) {
 
         if (
             !this.isAlive ||
-            !this.controlsEnabled
-        ) {
-
-            return null;
-        }
-
-
-        if (
+            !this.controlsEnabled ||
             !this.grenadeInventory
-                .has(
-                    type
-                )
+                .has(type)
         ) {
-
             return null;
         }
 
 
-        const origin =
-            this.getEyePosition();
+        const grenade =
+            grenadeSystem
+                .throwFromInventory({
+                    inventory:
+                        this.grenadeInventory,
+
+                    type,
+
+                    owner:
+                        this,
+
+                    origin:
+                        this.getEyePosition(),
+
+                    direction:
+                        this.getViewDirection(),
+
+                    strength
+                });
 
 
-        const direction =
-            this.getViewDirection();
+        if (grenade) {
+
+            const available =
+                this.getAvailableGrenadeTypes();
 
 
-        return grenadeSystem
-            .throwFromInventory({
-                inventory:
-                    this.grenadeInventory,
+            if (
+                !this.grenadeInventory
+                    .has(type) &&
+                available.length > 0
+            ) {
 
-                type,
+                this.selectedGrenadeType =
+                    available[0];
+            }
+        }
 
-                owner:
-                    this,
 
-                origin,
+        return grenade;
+    }
 
-                direction,
 
-                strength
-            });
+    /*
+     * Legacy API:
+     * old code may still call throwGrenade().
+     */
+    throwGrenade(
+        type =
+            this.selectedGrenadeType,
+        strength = 1
+    ) {
+
+        return this.commitGrenadeThrow(
+            type,
+            strength
+        );
     }
 
 
@@ -2091,6 +2388,11 @@ export class Player {
             false;
 
 
+        this.setSniperScopeLevel(
+            0
+        );
+
+
         this.inventory
             .currentWeapon
             ?.releaseTrigger();
@@ -2372,6 +2674,18 @@ export class Player {
             false;
 
 
+        this.grenadeMode =
+            false;
+
+        this.grenadePrimeHeld =
+            false;
+
+
+        this.setSniperScopeLevel(
+            0
+        );
+
+
         this.eyeHeight =
             PLAYER_CONFIG
                 .eyeHeight;
@@ -2563,7 +2877,19 @@ export class Player {
 			false;
 
 
-		this.grenadeInventory
+
+		this.grenadeMode =
+			false;
+
+
+		this.grenadePrimeHeld =
+			false;
+		
+
+		this.setSniperScopeLevel(
+			0
+		);
+this.grenadeInventory
 			.clear();
 
 
@@ -2811,7 +3137,16 @@ export class Player {
 
             grenades:
                 this.grenadeInventory
-                    .serialize()
+                    .serialize(),
+
+            grenadeMode:
+                this.grenadeMode,
+
+            selectedGrenade:
+                this.selectedGrenadeType,
+
+            sniperScopeLevel:
+                this.sniperScopeLevel
         };
     }
 

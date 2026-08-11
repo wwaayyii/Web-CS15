@@ -35,7 +35,8 @@ import {
     INPUT_CONFIG,
     TEAM,
     BOT_CONFIG,
-    GAME_EVENT
+    GAME_EVENT,
+    SNIPER_SCOPE_CONFIG
 } from "./config.js";
 
 
@@ -70,8 +71,7 @@ import {
 } from "../weapons/weaponView.js";
 
 import {
-    grenadeSystem,
-    GRENADE_TYPE
+    grenadeSystem
 } from "../weapons/grenade.js";
 
 
@@ -150,6 +150,23 @@ export class Game {
         this.botAIManager = null;
 
         this.weaponView = null;
+
+
+        // ====================================================
+        // Sniper Scope V1
+        // ====================================================
+
+        this.sniperScopeActive =
+            false;
+
+
+        this.sniperScopeLevel =
+            0;
+
+
+        this.sniperNormalFov =
+            SNIPER_SCOPE_CONFIG
+                .normalFov;
 
 
         // ====================================================
@@ -805,6 +822,12 @@ export class Game {
 
                 this.player
                     ?.stopFire();
+
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
 
 
                 gameEvents.emit(
@@ -1905,6 +1928,13 @@ export class Game {
                 this.player
                     ?.stopFire?.();
 
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
+
                 this.setPaused(
                     true
                 );
@@ -2077,6 +2107,12 @@ export class Game {
                     ?.stopFire?.();
 
 
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        false
+                });
+
+
                 this.weaponView
                     ?.setVisible?.(
                         false
@@ -2125,6 +2161,12 @@ export class Game {
                     ?.exitSpectatorMode?.();
 
 
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        false
+                });
+
+
                 /*
                  * 恢复第一人称枪。
                  */
@@ -2132,6 +2174,75 @@ export class Game {
                     ?.setVisible?.(
                         true
                     );
+            }
+        );
+
+
+        // ----------------------------------------------------
+        // Sniper Scope Auto Exit
+        // ----------------------------------------------------
+
+        gameEvents.on(
+            "weapon:equip",
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                if (
+                    this.sniperScopeActive
+                ) {
+
+                    this.exitSniperScope({
+                        restoreWeaponView:
+                            true
+                    });
+                }
+            }
+        );
+
+
+        gameEvents.on(
+            GAME_EVENT.WEAPON_RELOAD,
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+            }
+        );
+
+
+        gameEvents.on(
+            "grenade:selected",
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        false
+                });
             }
         );
 
@@ -2339,12 +2450,24 @@ export class Game {
 
             case INPUT_CONFIG.reload:
 
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
+
                 this.player.reload();
 
                 break;
 
 
             case INPUT_CONFIG.weaponPrimary:
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
 
                 this.player.equipPrimary();
 
@@ -2353,12 +2476,24 @@ export class Game {
 
             case INPUT_CONFIG.weaponSecondary:
 
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
+
                 this.player.equipSecondary();
 
                 break;
 
 
             case INPUT_CONFIG.knife:
+
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
 
                 this.player.equipKnife();
 
@@ -2367,58 +2502,44 @@ export class Game {
 
             case INPUT_CONFIG.lastWeapon:
 
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        true
+                });
+
+
                 this.player.switchLastWeapon();
 
                 break;
 
 
             // =================================================
-            // Grenade Select V1
+            // Grenade First Person V1
             //
-            // 4 = HE
-            // 5 = Flashbang
-            // 6 = Smoke
-            // G = Throw selected grenade
+            // 4 = Grenade Slot / cycle HE -> Flash -> Smoke
+            // Left Mouse = hold to prime, release to throw
             // =================================================
 
-            case INPUT_CONFIG.grenadeHE:
+            case INPUT_CONFIG.grenadeSlot:
 
                 event.preventDefault();
 
-                this.player.selectGrenade(
-                    GRENADE_TYPE.HE
-                );
 
-                break;
-
-
-            case INPUT_CONFIG.grenadeFlash:
-
-                event.preventDefault();
-
-                this.player.selectGrenade(
-                    GRENADE_TYPE.FLASH
-                );
-
-                break;
+                this.exitSniperScope({
+                    restoreWeaponView:
+                        false
+                });
 
 
-            case INPUT_CONFIG.grenadeSmoke:
+                if (
+                    !this.weaponView
+                        ?.isGrenadeBusy?.()
+                ) {
 
-                event.preventDefault();
+                    this.player
+                        .cycleGrenadeSlot();
+                }
 
-                this.player.selectGrenade(
-                    GRENADE_TYPE.SMOKE
-                );
-
-                break;
-
-
-            case INPUT_CONFIG.grenade:
-
-                event.preventDefault();
-
-                this.player.throwGrenade();
 
                 break;
 
@@ -2987,10 +3108,40 @@ export class Game {
 
         if (
             event.button ===
+            2
+        ) {
+
+            event.preventDefault();
+
+
+            this.toggleSniperScope();
+
+            return;
+        }
+
+
+        if (
+            event.button ===
             0
         ) {
 
-            this.player.startFire();
+            if (
+                this.player.grenadeMode
+            ) {
+
+                if (
+                    this.player
+                        .beginGrenadePrime()
+                ) {
+
+                    this.weaponView
+                        ?.beginGrenadePrime?.();
+                }
+
+            } else {
+
+                this.player.startFire();
+            }
         }
     }
 
@@ -3006,9 +3157,369 @@ export class Game {
             0
         ) {
 
-            this.player
-                ?.stopFire();
+            if (
+                this.player
+                    ?.grenadeMode
+            ) {
+
+                if (
+                    this.player
+                        .releaseGrenadePrime()
+                ) {
+
+                    this.weaponView
+                        ?.releaseGrenadeThrow?.();
+                }
+
+            } else {
+
+                this.player
+                    ?.stopFire();
+            }
         }
+    }
+
+
+    // ========================================================
+    // Sniper Scope V2
+    //
+    // Right Mouse:
+    // 0 -> 1 -> 2 -> 0
+    // ========================================================
+
+    getCurrentScopeWeapon() {
+
+        const weapon =
+            this.player
+                ?.inventory
+                ?.currentWeapon;
+
+
+        if (
+            !weapon ||
+            weapon.config
+                ?.scope !==
+                true
+        ) {
+
+            return null;
+        }
+
+
+        return weapon;
+    }
+
+
+    canEnterSniperScope() {
+
+        if (
+            !SNIPER_SCOPE_CONFIG
+                .enabled ||
+            !this.player
+                ?.isAlive ||
+            !this.player
+                ?.controlsEnabled ||
+            this.player
+                ?.grenadeMode ||
+            this.player
+                ?.isSpectating
+        ) {
+
+            return false;
+        }
+
+
+        const weapon =
+            this.getCurrentScopeWeapon();
+
+
+        if (
+            !weapon ||
+            weapon.isReloading
+        ) {
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    getScopeFov(
+        level
+    ) {
+
+        if (
+            level >=
+            2
+        ) {
+
+            return (
+                SNIPER_SCOPE_CONFIG
+                    .zoomLevel2Fov ??
+                14
+            );
+        }
+
+
+        if (
+            level >=
+            1
+        ) {
+
+            return (
+                SNIPER_SCOPE_CONFIG
+                    .zoomLevel1Fov ??
+                SNIPER_SCOPE_CONFIG
+                    .zoomFov ??
+                28
+            );
+        }
+
+
+        return (
+            this.sniperNormalFov ||
+            SNIPER_SCOPE_CONFIG
+                .normalFov
+        );
+    }
+
+
+    setSniperScopeLevel(
+        level,
+        {
+            restoreWeaponView = true
+        } = {}
+    ) {
+
+        level =
+            Math.max(
+                0,
+                Math.min(
+                    2,
+                    Math.floor(
+                        Number(level) ||
+                        0
+                    )
+                )
+            );
+
+
+        if (
+            level >
+            0 &&
+            !this.canEnterSniperScope()
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            !this.camera
+        ) {
+
+            return false;
+        }
+
+
+        const previousLevel =
+            this.sniperScopeLevel;
+
+
+        if (
+            previousLevel ===
+            0 &&
+            level >
+            0
+        ) {
+
+            this.sniperNormalFov =
+                Number(
+                    this.camera.fov
+                ) ||
+                SNIPER_SCOPE_CONFIG
+                    .normalFov;
+        }
+
+
+        this.sniperScopeLevel =
+            level;
+
+
+        this.sniperScopeActive =
+            level >
+            0;
+
+
+        this.player
+            ?.setSniperScopeLevel?.(
+                level
+            );
+
+
+        if (
+            level >
+            0
+        ) {
+
+            this.camera.fov =
+                this.getScopeFov(
+                    level
+                );
+
+
+            this.camera
+                .updateProjectionMatrix();
+
+
+            this.weaponView
+                ?.setVisible?.(
+                    false
+                );
+
+
+            hud.setSniperScope?.(
+                true
+            );
+
+        } else {
+
+            this.camera.fov =
+                Number(
+                    this.sniperNormalFov
+                ) ||
+                SNIPER_SCOPE_CONFIG
+                    .normalFov;
+
+
+            this.camera
+                .updateProjectionMatrix();
+
+
+            hud.setSniperScope?.(
+                false
+            );
+
+
+            if (
+                restoreWeaponView &&
+                this.player
+                    ?.isAlive &&
+                !this.player
+                    ?.isSpectating
+            ) {
+
+                this.weaponView
+                    ?.setVisible?.(
+                        true
+                    );
+            }
+        }
+
+
+        if (
+            previousLevel !==
+            level
+        ) {
+
+            gameEvents.emit(
+                "player:scope-changed",
+                {
+                    player:
+                        this.player,
+
+                    active:
+                        level > 0,
+
+                    level,
+
+                    previousLevel,
+
+                    weapon:
+                        this.player
+                            ?.inventory
+                            ?.currentWeapon ??
+                        null,
+
+                    fov:
+                        this.camera.fov
+                }
+            );
+        }
+
+
+        return true;
+    }
+
+
+    enterSniperScope(
+        level = 1
+    ) {
+
+        return this.setSniperScopeLevel(
+            level,
+            {
+                restoreWeaponView:
+                    false
+            }
+        );
+    }
+
+
+    exitSniperScope({
+        restoreWeaponView = true
+    } = {}) {
+
+        const wasActive =
+            this.sniperScopeLevel >
+            0;
+
+
+        this.setSniperScopeLevel(
+            0,
+            {
+                restoreWeaponView
+            }
+        );
+
+
+        return wasActive;
+    }
+
+
+    toggleSniperScope() {
+
+        if (
+            this.sniperScopeLevel ===
+            0
+        ) {
+
+            return this.enterSniperScope(
+                1
+            );
+        }
+
+
+        if (
+            this.sniperScopeLevel ===
+            1
+        ) {
+
+            return this.enterSniperScope(
+                2
+            );
+        }
+
+
+        this.exitSniperScope({
+            restoreWeaponView:
+                true
+        });
+
+
+        return true;
     }
 
 
@@ -3543,11 +4054,12 @@ export class Game {
 
             /*
              * 玩家活着：
-             * 第一人称武器必须显示。
+             * 普通状态显示第一人称武器；
+             * Scope Level 1 / 2 时持续隐藏。
              */
             this.weaponView
                 ?.setVisible?.(
-                    true
+                    !this.sniperScopeActive
                 );
 
 
@@ -3812,6 +4324,12 @@ export class Game {
 
         this.player
             ?.stopFire();
+
+
+        this.exitSniperScope({
+            restoreWeaponView:
+                false
+        });
     }
 
 
@@ -3825,6 +4343,17 @@ export class Game {
             Boolean(
                 paused
             );
+
+
+        if (
+            this.paused
+        ) {
+
+            this.exitSniperScope({
+                restoreWeaponView:
+                    true
+            });
+        }
 
 
         const roundState =
@@ -3945,6 +4474,20 @@ export class Game {
 
             navigationDebug:
                 this.navigationDebugEnabled,
+
+            sniperScope:
+                {
+                    active:
+                        this.sniperScopeActive,
+
+                    level:
+                        this.sniperScopeLevel,
+
+                    fov:
+                        this.camera
+                            ?.fov ??
+                        null
+                },
 
             radio:
                 radio.getState()

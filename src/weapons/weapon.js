@@ -250,6 +250,18 @@ export class Weapon {
 
 
         // ----------------------------------------------------
+        // Player Sniper Scope State
+        //
+        // null = BOT / 非玩家 Scope 逻辑
+        // 0    = 未开镜
+        // 1/2  = 已开镜
+        // ----------------------------------------------------
+
+        this.scopeLevel =
+            null;
+
+
+        // ----------------------------------------------------
         // Recoil
         // ----------------------------------------------------
 
@@ -300,6 +312,40 @@ export class Weapon {
         this.owner = owner;
 
         return this;
+    }
+
+
+    // ========================================================
+    // Sniper Scope State
+    // ========================================================
+
+    setScopeLevel(
+        level = null
+    ) {
+
+        if (
+            level == null
+        ) {
+
+            this.scopeLevel =
+                null;
+
+            return this.scopeLevel;
+        }
+
+
+        this.scopeLevel =
+            clamp(
+                Math.floor(
+                    Number(level) ||
+                    0
+                ),
+                0,
+                2
+            );
+
+
+        return this.scopeLevel;
     }
 
 
@@ -666,6 +712,9 @@ export class Weapon {
 
         airborne = false,
 
+        scopeLevel =
+            this.scopeLevel,
+
         friendlyFire = false,
 
         raycaster = null
@@ -806,7 +855,8 @@ export class Weapon {
                     movementFactor,
                     crouching,
                     crouchAccuracyMultiplier,
-                    airborne
+                    airborne,
+                    scopeLevel
                 }
             );
 
@@ -854,12 +904,131 @@ export class Weapon {
         movementFactor = 0,
         crouching = false,
         crouchAccuracyMultiplier = 0.70,
-        airborne = false
+        airborne = false,
+        scopeLevel =
+            this.scopeLevel
     } = {}) {
 
         const spreadConfig =
             this.config.spread ??
             {};
+
+
+        // ----------------------------------------------------
+        // Sniper Accuracy V1
+        //
+        // 只在 scopeLevel != null 时启用。
+        // Player 会同步 0 / 1 / 2；
+        // BOT 默认 null，继续沿用原本散布。
+        // ----------------------------------------------------
+
+        const sniperAccuracy =
+            this.config
+                .sniperAccuracy;
+
+
+        if (
+            sniperAccuracy &&
+            scopeLevel != null
+        ) {
+
+            const scoped =
+                Number(scopeLevel) >
+                0;
+
+
+            const sniperSpread =
+                scoped
+                    ? sniperAccuracy
+                        .scoped
+                    : sniperAccuracy
+                        .unscoped;
+
+
+            if (sniperSpread) {
+
+                let spread =
+                    Number(
+                        sniperSpread
+                            .stand
+                    ) || 0;
+
+
+                if (
+                    airborne
+                ) {
+
+                    spread =
+                        Number(
+                            sniperSpread
+                                .air
+                        ) ||
+                        spread;
+
+                } else if (
+                    crouching
+                ) {
+
+                    spread =
+                        Number(
+                            sniperSpread
+                                .crouch
+                        ) ||
+                        spread;
+
+                } else if (
+                    movementFactor >
+                    0
+                ) {
+
+                    const moveSpread =
+                        Number(
+                            sniperSpread
+                                .move
+                        ) ||
+                        spread;
+
+
+                    spread +=
+                        (
+                            moveSpread -
+                            spread
+                        ) *
+                        clamp(
+                            Number(
+                                movementFactor
+                            ) || 0,
+                            0,
+                            1
+                        );
+                }
+
+
+                const recoilSpreadPerBloom =
+                    Number(
+                        this.config.recoil
+                            ?.vertical ??
+                        0
+                    ) *
+                    0.030;
+
+
+                spread +=
+                    Math.max(
+                        0,
+                        Number(
+                            this.recoilBloom
+                        ) || 0
+                    ) *
+                    recoilSpreadPerBloom;
+
+
+                return Math.max(
+                    0,
+                    spread
+                );
+            }
+        }
 
 
         /*
@@ -1017,7 +1186,9 @@ export class Weapon {
             movementFactor = 0,
             crouching = false,
             crouchAccuracyMultiplier = 0.70,
-            airborne = false
+            airborne = false,
+            scopeLevel =
+                this.scopeLevel
         } = {}
     ) {
 
@@ -1036,7 +1207,8 @@ export class Weapon {
                 movementFactor,
                 crouching,
                 crouchAccuracyMultiplier,
-                airborne
+                airborne,
+                scopeLevel
             });
 
 
@@ -1682,6 +1854,9 @@ export class Weapon {
 
             recoilBloom:
                 this.recoilBloom,
+
+            scopeLevel:
+                this.scopeLevel,
 
             currentSpread:
                 this.getCurrentSpread()
@@ -2816,6 +2991,8 @@ export class WeaponSystem {
 
             airborne = false,
 
+            scopeLevel = null,
+
             currentTime =
                 performance.now() /
                 1000
@@ -2844,6 +3021,8 @@ export class WeaponSystem {
             crouchAccuracyMultiplier,
 
             airborne,
+
+            scopeLevel,
 
             friendlyFire:
                 this.friendlyFire,

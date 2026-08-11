@@ -624,6 +624,23 @@ export const WEAPON_CONFIG = freezeDeep({
 
         scope: true,
 
+        // Sniper Accuracy V1
+        sniperAccuracy: {
+            unscoped: {
+                stand: 0.035,
+                crouch: 0.025,
+                move: 0.120,
+                air: 0.260
+            },
+
+            scoped: {
+                stand: 0.0015,
+                crouch: 0.0008,
+                move: 0.055,
+                air: 0.220
+            }
+        },
+
         botBurst: {
             min: 1,
             max: 1
@@ -940,6 +957,23 @@ export const WEAPON_CONFIG = freezeDeep({
         movementSpeed: 0.95,
 
         scope: true,
+
+        // Sniper Accuracy V1
+        sniperAccuracy: {
+            unscoped: {
+                stand: 0.020,
+                crouch: 0.014,
+                move: 0.075,
+                air: 0.160
+            },
+
+            scoped: {
+                stand: 0.0025,
+                crouch: 0.0015,
+                move: 0.035,
+                air: 0.130
+            }
+        },
 
         botBurst: {
             min: 1,
@@ -1546,6 +1580,30 @@ export const GRAPHICS_CONFIG = freezeDeep({
 });
 
 
+
+
+// ============================================================
+// Sniper Scope V2
+//
+// Right Mouse:
+// 0 -> 1 -> 2 -> 0
+// ============================================================
+
+export const SNIPER_SCOPE_CONFIG = freezeDeep({
+    enabled: true,
+
+    normalFov: 75,
+
+    zoomLevel1Fov: 28,
+
+    zoomLevel2Fov: 14,
+
+    // Legacy alias
+    zoomFov: 28,
+
+    radiusVmin: 44
+});
+
 // ============================================================
 // 输入
 // ============================================================
@@ -1573,15 +1631,10 @@ export const INPUT_CONFIG = freezeDeep({
 
     reload: "KeyR",
 
-    // Grenade Select V1
-    // 4 = HE, 5 = Flashbang, 6 = Smoke, G = Throw selected grenade
-    grenadeHE: "Digit4",
-
-    grenadeFlash: "Digit5",
-
-    grenadeSmoke: "Digit6",
-
-    grenade: "KeyG",
+    // Grenade First Person V1
+    // 4 = Grenade Slot / cycle HE -> Flash -> Smoke
+    // Left Mouse = prime / throw
+    grenadeSlot: "Digit4",
 
     buy: "KeyB",
 

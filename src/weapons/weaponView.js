@@ -51,7 +51,12 @@ export const WEAPON_VIEW_STATE = Object.freeze({
     DRAW: "draw",
     FIRE: "fire",
     RELOAD: "reload",
-    KNIFE: "knife"
+    KNIFE: "knife",
+
+    GRENADE_DRAW: "grenade_draw",
+    GRENADE_PRIME: "grenade_prime",
+    GRENADE_THROW: "grenade_throw",
+    GRENADE_RECOVER: "grenade_recover"
 });
 
 
@@ -414,6 +419,27 @@ export class WeaponView {
 
 
         // ====================================================
+        // Grenade First Person V1
+        // ====================================================
+
+        this.grenadeMode = false;
+
+        this.currentGrenadeType = null;
+
+        this.grenadePrimeHeld = false;
+
+        this.grenadeThrowCommitted = false;
+
+        this.grenadeTime = 0;
+
+        this.grenadeDrawDuration = 0.28;
+
+        this.grenadeThrowDuration = 0.46;
+
+        this.grenadeRecoverDuration = 0.24;
+
+
+        // ====================================================
         // Mouse sway
         // ====================================================
 
@@ -636,6 +662,38 @@ export class WeaponView {
                         0.05
                     );
             };
+
+
+        this._handlers.grenadeSelected =
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.setGrenade(
+                    data.type
+                );
+            };
+
+
+        this._handlers.grenadeHolster =
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+                    return;
+                }
+
+
+                this.restoreCurrentWeaponView();
+            };
     }
 
 
@@ -668,6 +726,18 @@ export class WeaponView {
         gameEvents.on(
             "weapon:empty",
             this._handlers.weaponEmpty
+        );
+
+
+        gameEvents.on(
+            "grenade:selected",
+            this._handlers.grenadeSelected
+        );
+
+
+        gameEvents.on(
+            "grenade:holster",
+            this._handlers.grenadeHolster
         );
     }
 
@@ -709,6 +779,15 @@ export class WeaponView {
         if (!weapon) {
             return;
         }
+
+
+        this.grenadeMode = false;
+
+        this.currentGrenadeType = null;
+
+        this.grenadePrimeHeld = false;
+
+        this.grenadeThrowCommitted = false;
 
 
         const weaponId =
@@ -784,6 +863,398 @@ export class WeaponView {
 
 
         this.playDraw();
+    }
+
+
+
+    // ========================================================
+    // Grenade First Person V1
+    // ========================================================
+
+    setGrenade(type) {
+
+        if (
+            ![
+                "he",
+                "flash",
+                "smoke"
+            ].includes(type)
+        ) {
+            return false;
+        }
+
+
+        this.clearReloadEjectedMagazine();
+
+        this.reloadMagazine = null;
+
+        this.grenadeMode = true;
+
+        this.currentGrenadeType = type;
+
+        this.currentWeapon = null;
+
+        this.currentWeaponId = type;
+
+
+        this.clearWeaponModel();
+
+
+        let model =
+            this.modelCache.get(
+                `grenade:${type}`
+            );
+
+
+        if (!model) {
+
+            model =
+                this.createGrenade(type);
+
+
+            this.modelCache.set(
+                `grenade:${type}`,
+                model
+            );
+        }
+
+
+        this.currentModel = model;
+
+        this.currentModel.visible = true;
+
+        this.weaponRoot.add(
+            this.currentModel
+        );
+
+
+        this.applyWeaponTransform(type);
+
+
+        this.grenadePrimeHeld = false;
+
+        this.grenadeThrowCommitted = false;
+
+        this.grenadeTime = 0;
+
+        this.state =
+            WEAPON_VIEW_STATE.GRENADE_DRAW;
+
+
+        return true;
+    }
+
+
+    restoreCurrentWeaponView() {
+
+        this.grenadeMode = false;
+
+        this.currentGrenadeType = null;
+
+        this.grenadePrimeHeld = false;
+
+        this.grenadeThrowCommitted = false;
+
+
+        const weapon =
+            this.player
+                ?.inventory
+                ?.currentWeapon;
+
+
+        if (weapon) {
+
+            this.currentWeaponId = null;
+
+            this.setWeapon(weapon);
+        }
+
+
+        return true;
+    }
+
+
+    beginGrenadePrime() {
+
+        if (
+            !this.grenadeMode ||
+            !this.currentGrenadeType ||
+            this.state ===
+                WEAPON_VIEW_STATE.GRENADE_THROW ||
+            this.state ===
+                WEAPON_VIEW_STATE.GRENADE_RECOVER
+        ) {
+            return false;
+        }
+
+
+        this.grenadePrimeHeld = true;
+
+        this.grenadeTime = 0;
+
+        this.state =
+            WEAPON_VIEW_STATE.GRENADE_PRIME;
+
+
+        return true;
+    }
+
+
+    releaseGrenadeThrow() {
+
+        if (
+            !this.grenadeMode ||
+            !this.grenadePrimeHeld ||
+            this.state !==
+                WEAPON_VIEW_STATE.GRENADE_PRIME
+        ) {
+            return false;
+        }
+
+
+        this.grenadePrimeHeld = false;
+
+        this.grenadeThrowCommitted = false;
+
+        this.grenadeTime = 0;
+
+        this.state =
+            WEAPON_VIEW_STATE.GRENADE_THROW;
+
+
+        return true;
+    }
+
+
+    isGrenadeBusy() {
+
+        return (
+            this.state ===
+                WEAPON_VIEW_STATE.GRENADE_PRIME ||
+            this.state ===
+                WEAPON_VIEW_STATE.GRENADE_THROW ||
+            this.state ===
+                WEAPON_VIEW_STATE.GRENADE_RECOVER
+        );
+    }
+
+
+    updateGrenadeAnimation(delta) {
+
+        this.grenadeTime += delta;
+
+
+        if (
+            this.state ===
+            WEAPON_VIEW_STATE.GRENADE_DRAW
+        ) {
+
+            const t =
+                smoothstep(
+                    clamp01(
+                        this.grenadeTime /
+                        this.grenadeDrawDuration
+                    )
+                );
+
+
+            this.weaponRoot.position.y -=
+                (1 - t) * 0.42;
+
+            this.weaponRoot.position.x +=
+                (1 - t) * 0.16;
+
+            this.weaponRoot.rotation.z +=
+                (1 - t) * 0.36;
+
+
+            if (t >= 1) {
+
+                this.state =
+                    WEAPON_VIEW_STATE.IDLE;
+
+                this.grenadeTime = 0;
+            }
+
+
+            return;
+        }
+
+
+        if (
+            this.state ===
+            WEAPON_VIEW_STATE.GRENADE_PRIME
+        ) {
+
+            const t =
+                smoothstep(
+                    clamp01(
+                        this.grenadeTime /
+                        0.16
+                    )
+                );
+
+
+            this.weaponRoot.position.x -=
+                t * 0.10;
+
+            this.weaponRoot.position.y +=
+                t * 0.055;
+
+            this.weaponRoot.position.z +=
+                t * 0.10;
+
+            this.weaponRoot.rotation.x -=
+                t * 0.18;
+
+            this.weaponRoot.rotation.z -=
+                t * 0.22;
+
+
+            return;
+        }
+
+
+        if (
+            this.state ===
+            WEAPON_VIEW_STATE.GRENADE_THROW
+        ) {
+
+            const rawT =
+                clamp01(
+                    this.grenadeTime /
+                    this.grenadeThrowDuration
+                );
+
+
+            if (rawT < 0.38) {
+
+                const back =
+                    smoothstep(
+                        rawT / 0.38
+                    );
+
+
+                this.weaponRoot.position.x -=
+                    back * 0.18;
+
+                this.weaponRoot.position.y -=
+                    back * 0.05;
+
+                this.weaponRoot.position.z +=
+                    back * 0.15;
+
+                this.weaponRoot.rotation.x -=
+                    back * 0.30;
+
+                this.weaponRoot.rotation.z -=
+                    back * 0.34;
+
+            } else {
+
+                const forward =
+                    smoothstep(
+                        (rawT - 0.38) /
+                        0.62
+                    );
+
+
+                this.weaponRoot.position.x -=
+                    0.18;
+
+                this.weaponRoot.position.x +=
+                    forward * 0.28;
+
+                this.weaponRoot.position.y +=
+                    forward * 0.13;
+
+                this.weaponRoot.position.z -=
+                    forward * 0.48;
+
+                this.weaponRoot.rotation.x +=
+                    forward * 0.72;
+
+                this.weaponRoot.rotation.z +=
+                    forward * 0.48;
+            }
+
+
+            if (
+                rawT >= 0.60 &&
+                !this.grenadeThrowCommitted
+            ) {
+
+                this.grenadeThrowCommitted = true;
+
+
+                const thrown =
+                    this.player
+                        ?.commitGrenadeThrow?.(
+                            this.currentGrenadeType,
+                            1
+                        );
+
+
+                if (
+                    thrown &&
+                    this.currentModel
+                ) {
+
+                    this.currentModel.visible =
+                        false;
+                }
+            }
+
+
+            if (rawT >= 1) {
+
+                this.state =
+                    WEAPON_VIEW_STATE.GRENADE_RECOVER;
+
+                this.grenadeTime = 0;
+            }
+
+
+            return;
+        }
+
+
+        if (
+            this.state ===
+            WEAPON_VIEW_STATE.GRENADE_RECOVER
+        ) {
+
+            const t =
+                smoothstep(
+                    clamp01(
+                        this.grenadeTime /
+                        this.grenadeRecoverDuration
+                    )
+                );
+
+
+            this.weaponRoot.position.y -=
+                t * 0.38;
+
+
+            if (t >= 1) {
+
+                if (this.currentModel) {
+
+                    this.currentModel.visible =
+                        true;
+                }
+
+
+                this.player
+                    ?.exitGrenadeMode?.({
+                        restoreWeapon: true
+                    });
+
+
+                this.grenadeTime = 0;
+            }
+        }
     }
 
 
@@ -2080,65 +2551,162 @@ export class WeaponView {
             this.createCommonMaterials();
 
 
-        let bodyMaterial =
-            mat.green;
+        if (type === "he") {
+
+            const body =
+                new THREE.Mesh(
+                    new THREE.SphereGeometry(
+                        0.15,
+                        12,
+                        10
+                    ),
+                    mat.green
+                );
 
 
-        if (
-            type === "flash"
-        ) {
-
-            bodyMaterial =
-                mat.light;
-        }
-
-
-        if (
-            type === "smoke"
-        ) {
-
-            bodyMaterial =
-                mat.dark;
-        }
-
-
-        const body =
-            new THREE.Mesh(
-                new THREE.CylinderGeometry(
-                    0.12,
-                    0.14,
-                    0.32,
-                    10
-                ),
-                bodyMaterial
+            body.scale.set(
+                0.92,
+                1.10,
+                0.92
             );
 
 
-        body.rotation.x =
-            Math.PI / 2;
+            body.position.z =
+                -0.16;
 
 
-        body.position.z =
-            -0.18;
+            group.add(body);
 
 
-        group.add(
-            body
-        );
+            group.add(
+                createBox(
+                    new THREE.Vector3(
+                        0.11,
+                        0.065,
+                        0.10
+                    ),
+                    mat.black,
+                    new THREE.Vector3(
+                        0,
+                        0.15,
+                        -0.15
+                    )
+                )
+            );
+
+        } else if (type === "flash") {
+
+            group.add(
+                createCylinder(
+                    0.115,
+                    0.34,
+                    mat.light,
+                    new THREE.Vector3(
+                        0,
+                        0,
+                        -0.17
+                    ),
+                    new THREE.Vector3(
+                        Math.PI / 2,
+                        0,
+                        0
+                    ),
+                    12
+                )
+            );
+
+
+            group.add(
+                createCylinder(
+                    0.122,
+                    0.035,
+                    mat.black,
+                    new THREE.Vector3(
+                        0,
+                        0,
+                        -0.02
+                    ),
+                    new THREE.Vector3(
+                        Math.PI / 2,
+                        0,
+                        0
+                    ),
+                    12
+                )
+            );
+
+
+            group.add(
+                createCylinder(
+                    0.122,
+                    0.035,
+                    mat.black,
+                    new THREE.Vector3(
+                        0,
+                        0,
+                        -0.32
+                    ),
+                    new THREE.Vector3(
+                        Math.PI / 2,
+                        0,
+                        0
+                    ),
+                    12
+                )
+            );
+
+        } else {
+
+            group.add(
+                createCylinder(
+                    0.135,
+                    0.38,
+                    mat.dark,
+                    new THREE.Vector3(
+                        0,
+                        0,
+                        -0.18
+                    ),
+                    new THREE.Vector3(
+                        Math.PI / 2,
+                        0,
+                        0
+                    ),
+                    12
+                )
+            );
+
+
+            group.add(
+                createBox(
+                    new THREE.Vector3(
+                        0.16,
+                        0.045,
+                        0.10
+                    ),
+                    mat.green,
+                    new THREE.Vector3(
+                        0,
+                        0.02,
+                        -0.17
+                    )
+                )
+            );
+        }
 
 
         group.add(
             createBox(
                 new THREE.Vector3(
-                    0.12,
-                    0.07,
+                    0.105,
+                    0.055,
                     0.10
                 ),
                 mat.black,
                 new THREE.Vector3(
                     0,
-                    0.08,
-                    -0.03
+                    0.10,
+                    -0.02
                 )
             )
         );
@@ -2280,20 +2848,46 @@ export class WeaponView {
                 break;
 
 
-            case "he":
-            case "flash":
-            case "smoke":
+			case "he":
 
-                this.basePosition.set(
-                    0.34,
-                    -0.38,
-                    -0.48
-                );
+				this.basePosition.set(
+					0.34,
+					-0.38,
+					-0.48
+				);
 
-                scale =
-                    1.15;
+				scale =
+					1.15;
 
-                break;
+				break;
+
+
+			case "flash":
+
+				this.basePosition.set(
+					0.35,
+					-0.39,
+					-0.53
+				);
+
+				scale =
+					0.88;
+
+				break;
+
+
+			case "smoke":
+
+				this.basePosition.set(
+					0.35,
+					-0.40,
+					-0.55
+				);
+
+				scale =
+					0.82;
+
+				break;
         }
 
 
@@ -4623,6 +5217,18 @@ export class WeaponView {
                 );
 
                 break;
+
+
+            case WEAPON_VIEW_STATE.GRENADE_DRAW:
+            case WEAPON_VIEW_STATE.GRENADE_PRIME:
+            case WEAPON_VIEW_STATE.GRENADE_THROW:
+            case WEAPON_VIEW_STATE.GRENADE_RECOVER:
+
+                this.updateGrenadeAnimation(
+                    delta
+                );
+
+                break;
         }
 
 
@@ -4685,6 +5291,18 @@ export class WeaponView {
         gameEvents.off(
             "weapon:empty",
             this._handlers.weaponEmpty
+        );
+
+
+        gameEvents.off(
+            "grenade:selected",
+            this._handlers.grenadeSelected
+        );
+
+
+        gameEvents.off(
+            "grenade:holster",
+            this._handlers.grenadeHolster
         );
 
 

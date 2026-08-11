@@ -2499,3 +2499,204 @@ body {
 .crosshair-line {
     opacity: 1;
 }
+
+/* ==========================================================
+   SNIPER SCOPE V1
+   ========================================================== */
+
+.sniper-scope-overlay {
+    --scope-radius:
+        min(
+            44vh,
+            44vw
+        );
+
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 5000;
+
+    display: none;
+
+    pointer-events: none;
+
+    user-select: none;
+
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            rgba(0, 0, 0, 0)
+                0,
+            rgba(0, 0, 0, 0)
+                calc(
+                    var(--scope-radius) -
+                    2px
+                ),
+            rgba(0, 0, 0, 0.96)
+                var(--scope-radius),
+            #000
+                calc(
+                    var(--scope-radius) +
+                    5px
+                ),
+            #000
+                100%
+        );
+}
+
+
+.sniper-scope-ring {
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    width:
+        calc(
+            var(--scope-radius) *
+            2
+        );
+
+    height:
+        calc(
+            var(--scope-radius) *
+            2
+        );
+
+    transform:
+        translate(
+            -50%,
+            -50%
+        );
+
+    border:
+        2px solid
+        rgba(
+            0,
+            0,
+            0,
+            0.96
+        );
+
+    border-radius:
+        50%;
+
+    box-shadow:
+        inset
+        0 0 0
+        1px
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
+}
+
+
+.sniper-scope-line {
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    transform:
+        translate(
+            -50%,
+            -50%
+        );
+
+    background:
+        rgba(
+            10,
+            10,
+            10,
+            0.98
+        );
+
+    box-shadow:
+        0 0 1px
+        rgba(
+            255,
+            255,
+            255,
+            0.20
+        );
+}
+
+
+.sniper-scope-line-horizontal {
+    width:
+        calc(
+            var(--scope-radius) *
+            2
+        );
+
+    height:
+        1px;
+}
+
+
+.sniper-scope-line-vertical {
+    width:
+        1px;
+
+    height:
+        calc(
+            var(--scope-radius) *
+            2
+        );
+}
+
+
+.sniper-scope-center-dot {
+    position: absolute;
+
+    left: 50%;
+    top: 50%;
+
+    width: 3px;
+    height: 3px;
+
+    transform:
+        translate(
+            -50%,
+            -50%
+        );
+
+    border-radius:
+        50%;
+
+    background:
+        #050505;
+}
+
+
+/*
+ * 宽屏时圆形 Scope 仍按屏幕高度为主，
+ * 保持接近传统 CS 的大圆形瞄准镜。
+ */
+@media (
+    min-aspect-ratio: 16 / 10
+) {
+
+    .sniper-scope-overlay {
+        --scope-radius:
+            45vh;
+    }
+}
+
+
+@media (
+    max-width: 700px
+) {
+
+    .sniper-scope-overlay {
+        --scope-radius:
+            min(
+                43vh,
+                46vw
+            );
+    }
+}
