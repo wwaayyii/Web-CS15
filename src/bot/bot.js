@@ -51,6 +51,11 @@ import {
     GRENADE_TYPE
 } from "../weapons/grenade.js";
 
+import {
+    createBotWeaponModel,
+    disposeBotWeaponModel
+} from "./botWeaponView.js";
+
 
 // ============================================================
 // BOT 命中区域
@@ -312,7 +317,8 @@ export class Bot {
             leftLeg: null,
             rightLeg: null,
             visor: null,
-            rifleHolder: null
+            rifleHolder: null,
+            weaponModel: null
         };
 
 
@@ -368,6 +374,8 @@ export class Bot {
         this.createHPBar();
 
         this.setupDefaultLoadout();
+
+        this.syncWeaponModel();
 
         this.setupGrenadeLoadout({
             clearExisting:
@@ -975,39 +983,24 @@ export class Bot {
 
 
         // ====================================================
-        // Rifle Holder
+        // Weapon Holder
         //
-        // weapon.js 后面可以把枪模型挂这里。
+        // BOT Weapon Model V1:
+        // 实际枪模由 botWeaponView.js 根据当前武器创建。
         // ====================================================
 
         const rifleHolder =
             new THREE.Group();
 
 
+        rifleHolder.name =
+            "BOT_WEAPON_HOLDER";
+
+
         rifleHolder.position.set(
             0.12,
             0.06,
             -0.46
-        );
-
-
-        const placeholderGun =
-            new THREE.Mesh(
-                new THREE.BoxGeometry(
-                    0.09,
-                    0.12,
-                    0.70
-                ),
-                gunMaterial
-            );
-
-
-        placeholderGun.userData.ignoreHitbox =
-            true;
-
-
-        rifleHolder.add(
-            placeholderGun
         );
 
 
@@ -1746,6 +1739,13 @@ export class Bot {
         );
 
 
+        /*
+         * BotAI / Buy system 可能直接调用 inventory.equip()，
+         * 因此每帧做一次轻量 ID 检查，只有武器真正变化才重建模型。
+         */
+        this.syncWeaponModel();
+
+
         if (
             this.isBlind
         ) {
@@ -2340,6 +2340,9 @@ export class Bot {
         }
 
 
+        this.syncWeaponModel();
+
+
         if (
             this.bodyParts.rifleHolder
         ) {
@@ -2533,6 +2536,116 @@ export class Bot {
 
 
     // ========================================================
+    // BOT Weapon Model V1
+    // ========================================================
+
+    clearWeaponModel() {
+
+        const holder =
+            this.bodyParts
+                .rifleHolder;
+
+
+        const model =
+            this.bodyParts
+                .weaponModel;
+
+
+        if (
+            holder &&
+            model &&
+            model.parent ===
+                holder
+        ) {
+
+            holder.remove(
+                model
+            );
+        }
+
+
+        disposeBotWeaponModel(
+            model
+        );
+
+
+        this.bodyParts.weaponModel =
+            null;
+    }
+
+
+    syncWeaponModel(
+        weapon =
+            this.inventory
+                ?.currentWeapon
+    ) {
+
+        const holder =
+            this.bodyParts
+                .rifleHolder;
+
+
+        if (!holder) {
+
+            return null;
+        }
+
+
+        const weaponId =
+            weapon?.id;
+
+
+        if (!weaponId) {
+
+            this.clearWeaponModel();
+
+            return null;
+        }
+
+
+        if (
+            this.bodyParts
+                .weaponModel
+                ?.userData
+                ?.weaponId ===
+            weaponId
+        ) {
+
+            return this.bodyParts
+                .weaponModel;
+        }
+
+
+        this.clearWeaponModel();
+
+
+        const model =
+            createBotWeaponModel(
+                weaponId
+            );
+
+
+        holder.add(
+            model
+        );
+
+
+        this.bodyParts.weaponModel =
+            model;
+
+
+        /*
+         * 手雷动画期间仍保持隐藏。
+         */
+        holder.visible =
+            !this.isThrowingGrenade;
+
+
+        return model;
+    }
+
+
+    // ========================================================
     // Weapon
     // ========================================================
 
@@ -2543,40 +2656,71 @@ export class Bot {
         } = {}
     ) {
 
-        return this.inventory
-            .addWeapon(
-                weaponId,
-                {
-                    equip
-                }
-            );
+        const weapon =
+            this.inventory
+                .addWeapon(
+                    weaponId,
+                    {
+                        equip
+                    }
+                );
+
+
+        if (equip) {
+
+            this.syncWeaponModel();
+        }
+
+
+        return weapon;
     }
 
 
     equipPrimary() {
 
-        return this.inventory
-            .equipSlot(
-                WEAPON_SLOT.PRIMARY
-            );
+        const result =
+            this.inventory
+                .equipSlot(
+                    WEAPON_SLOT.PRIMARY
+                );
+
+
+        this.syncWeaponModel();
+
+
+        return result;
     }
 
 
     equipSecondary() {
 
-        return this.inventory
-            .equipSlot(
-                WEAPON_SLOT.SECONDARY
-            );
+        const result =
+            this.inventory
+                .equipSlot(
+                    WEAPON_SLOT.SECONDARY
+                );
+
+
+        this.syncWeaponModel();
+
+
+        return result;
     }
 
 
     equipKnife() {
 
-        return this.inventory
-            .equipSlot(
-                WEAPON_SLOT.KNIFE
-            );
+        const result =
+            this.inventory
+                .equipSlot(
+                    WEAPON_SLOT.KNIFE
+                );
+
+
+        this.syncWeaponModel();
+
+
+        return result;
     }
 
 

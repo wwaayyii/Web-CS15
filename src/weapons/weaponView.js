@@ -50,6 +50,7 @@ export const WEAPON_VIEW_STATE = Object.freeze({
     IDLE: "idle",
     DRAW: "draw",
     FIRE: "fire",
+    BOLT: "bolt",
     RELOAD: "reload",
     KNIFE: "knife",
 
@@ -416,6 +417,29 @@ export class WeaponView {
 
         this.knifeDuration =
             0.36;
+
+
+        // ====================================================
+        // Sniper Bolt Action V1
+        //
+        // Visual-only first-person bolt cycle.
+        // Weapon fireRate remains the authoritative fire lock.
+        // ====================================================
+
+        this.boltTime =
+            0;
+
+        this.boltDuration =
+            0;
+
+        this.boltWeaponId =
+            null;
+
+        this.boltSoundStages =
+            {
+                open: false,
+                close: false
+            };
 
 
         // ====================================================
@@ -788,6 +812,10 @@ export class WeaponView {
         this.grenadePrimeHeld = false;
 
         this.grenadeThrowCommitted = false;
+
+        this.boltTime = 0;
+        this.boltDuration = 0;
+        this.boltWeaponId = null;
 
 
         const weaponId =
@@ -3923,6 +3951,17 @@ export class WeaponView {
                 break;
 
 
+            case "scout":
+
+                kick =
+                    0.125;
+
+                rotation =
+                    0.075;
+
+                break;
+
+
             case "mp5":
 
                 kick =
@@ -4009,6 +4048,321 @@ export class WeaponView {
 
 
         this.triggerMuzzleFlash();
+
+
+        if (
+            weapon.id === "awp" ||
+            weapon.id === "scout"
+        ) {
+
+            this.beginBoltAction(
+                weapon
+            );
+        }
+    }
+
+
+    // ========================================================
+    // Sniper Bolt Action V1
+    // ========================================================
+
+    getBoltProfile(
+        weaponId =
+            this.currentWeaponId
+    ) {
+
+        if (
+            weaponId === "awp"
+        ) {
+
+            return {
+                duration: 1.22,
+                drop: 0.105,
+                side: 0.115,
+                back: 0.070,
+                pitch: 0.085,
+                yaw: 0.090,
+                roll: 0.125
+            };
+        }
+
+
+        return {
+            duration: 0.88,
+            drop: 0.070,
+            side: 0.075,
+            back: 0.045,
+            pitch: 0.055,
+            yaw: 0.060,
+            roll: 0.080
+        };
+    }
+
+
+    beginBoltAction(
+        weapon
+    ) {
+
+        const weaponId =
+            weapon?.id;
+
+
+        if (
+            weaponId !== "awp" &&
+            weaponId !== "scout"
+        ) {
+            return false;
+        }
+
+
+        const profile =
+            this.getBoltProfile(
+                weaponId
+            );
+
+
+        this.boltWeaponId =
+            weaponId;
+
+        this.boltTime =
+            0;
+
+        this.boltDuration =
+            profile.duration;
+
+        this.boltSoundStages.open =
+            false;
+
+        this.boltSoundStages.close =
+            false;
+
+        this.state =
+            WEAPON_VIEW_STATE.BOLT;
+
+        this.stateTime =
+            0;
+
+
+        return true;
+    }
+
+
+    emitBoltStage(
+        stage
+    ) {
+
+        gameEvents.emit(
+            "weapon:bolt-stage",
+            {
+                owner:
+                    this.player,
+
+                weapon:
+                    this.currentWeapon,
+
+                weaponId:
+                    this.boltWeaponId,
+
+                stage
+            }
+        );
+    }
+
+
+    updateBoltAnimation(
+        delta
+    ) {
+
+        this.boltTime +=
+            delta;
+
+
+        const duration =
+            Math.max(
+                0.001,
+                this.boltDuration
+            );
+
+
+        const t =
+            clamp01(
+                this.boltTime /
+                duration
+            );
+
+
+        const profile =
+            this.getBoltProfile(
+                this.boltWeaponId
+            );
+
+
+        /*
+         * 0.00 - 0.16 : recoil settles
+         * 0.16 - 0.42 : rifle lowers / bolt opens
+         * 0.42 - 0.68 : bolt is worked
+         * 0.68 - 1.00 : rifle returns to ready
+         */
+        let pose = 0;
+
+
+        if (
+            t < 0.16
+        ) {
+
+            pose =
+                smoothstep(
+                    t / 0.16
+                ) *
+                0.28;
+
+        } else if (
+            t < 0.42
+        ) {
+
+            pose =
+                lerp(
+                    0.28,
+                    1,
+                    smoothstep(
+                        (t - 0.16) /
+                        0.26
+                    )
+                );
+
+        } else if (
+            t < 0.68
+        ) {
+
+            pose =
+                1;
+
+        } else {
+
+            pose =
+                1 -
+                smoothstep(
+                    (t - 0.68) /
+                    0.32
+                );
+        }
+
+
+        this.weaponRoot.position.y -=
+            pose *
+            profile.drop;
+
+
+        this.weaponRoot.position.x +=
+            pose *
+            profile.side;
+
+
+        this.weaponRoot.position.z +=
+            pose *
+            profile.back;
+
+
+        this.weaponRoot.rotation.x +=
+            pose *
+            profile.pitch;
+
+
+        this.weaponRoot.rotation.y +=
+            pose *
+            profile.yaw;
+
+
+        this.weaponRoot.rotation.z +=
+            pose *
+            profile.roll;
+
+
+        /*
+         * A short secondary mechanical movement in the middle
+         * makes the cycle read as "operate bolt", rather than
+         * simply lowering the whole rifle.
+         */
+        if (
+            t >= 0.34 &&
+            t < 0.64
+        ) {
+
+            const localT =
+                (t - 0.34) /
+                0.30;
+
+
+            const pulse =
+                Math.sin(
+                    localT *
+                    Math.PI
+                );
+
+
+            this.weaponRoot.position.x +=
+                pulse *
+                profile.side *
+                0.34;
+
+
+            this.weaponRoot.position.z +=
+                pulse *
+                profile.back *
+                0.55;
+
+
+            this.weaponRoot.rotation.z +=
+                pulse *
+                profile.roll *
+                0.42;
+        }
+
+
+        if (
+            t >= 0.30 &&
+            !this.boltSoundStages.open
+        ) {
+
+            this.boltSoundStages.open =
+                true;
+
+            this.emitBoltStage(
+                "open"
+            );
+        }
+
+
+        if (
+            t >= 0.62 &&
+            !this.boltSoundStages.close
+        ) {
+
+            this.boltSoundStages.close =
+                true;
+
+            this.emitBoltStage(
+                "close"
+            );
+        }
+
+
+        if (
+            t >= 1
+        ) {
+
+            this.boltTime =
+                0;
+
+            this.boltDuration =
+                0;
+
+            this.boltWeaponId =
+                null;
+
+            this.state =
+                WEAPON_VIEW_STATE.IDLE;
+        }
     }
 
 
@@ -5195,6 +5549,15 @@ export class WeaponView {
             case WEAPON_VIEW_STATE.DRAW:
 
                 this.updateDrawAnimation(
+                    delta
+                );
+
+                break;
+
+
+            case WEAPON_VIEW_STATE.BOLT:
+
+                this.updateBoltAnimation(
                     delta
                 );
 
