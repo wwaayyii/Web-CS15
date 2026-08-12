@@ -74,6 +74,10 @@ import {
     grenadeSystem
 } from "../weapons/grenade.js";
 
+import {
+    droppedWeaponSystem
+} from "../weapons/droppedWeapon.js";
+
 
 import {
     audio
@@ -467,6 +471,17 @@ export class Game {
 
         this.createPlayer();
 
+		// ====================================================
+		// Dropped Weapon & Pickup System V1
+		// ====================================================
+
+		droppedWeaponSystem.init({
+			game:
+				this,
+
+			scene:
+				this.scene
+		});
 
         // ====================================================
         // First Person Weapon
