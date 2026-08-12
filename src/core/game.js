@@ -170,6 +170,18 @@ export class Game {
 
 
         // ====================================================
+        // Sniper Shooting Feedback V1
+        // ====================================================
+
+        this.sniperShotFovKick =
+            0;
+
+
+        this.sniperShotRecoverySpeed =
+            16;
+
+
+        // ====================================================
         // Multi Map
         // ====================================================
 
@@ -2248,6 +2260,46 @@ export class Game {
 
 
         // ----------------------------------------------------
+        // Sniper Shooting Feedback V1
+        // ----------------------------------------------------
+
+        gameEvents.on(
+            GAME_EVENT.WEAPON_FIRE,
+            data => {
+
+                if (
+                    data?.owner !==
+                    this.player ||
+                    !this.sniperScopeActive
+                ) {
+
+                    return;
+                }
+
+
+                const weapon =
+                    data.weapon;
+
+
+                if (
+                    !weapon ||
+                    weapon.config
+                        ?.scope !==
+                        true
+                ) {
+
+                    return;
+                }
+
+
+                this.triggerSniperShotFeedback(
+                    weapon
+                );
+            }
+        );
+
+
+        // ----------------------------------------------------
         // BOT Footstep
         // ----------------------------------------------------
 
@@ -3353,6 +3405,14 @@ export class Game {
             0;
 
 
+        /*
+         * 切换倍率 / 退出 Scope 时，
+         * 清掉上一发残留的 FOV kick。
+         */
+        this.sniperShotFovKick =
+            0;
+
+
         this.player
             ?.setSniperScopeLevel?.(
                 level
@@ -3520,6 +3580,148 @@ export class Game {
 
 
         return true;
+    }
+
+
+    // ========================================================
+    // Sniper Shooting Feedback V1
+    // ========================================================
+
+    triggerSniperShotFeedback(
+        weapon
+    ) {
+
+        if (
+            !this.sniperScopeActive ||
+            !weapon
+        ) {
+
+            return false;
+        }
+
+
+        const feedbackConfig =
+            SNIPER_SCOPE_CONFIG
+                .shotFeedback
+                ?.[
+                    weapon.id
+                ];
+
+
+        const fovKick =
+            Number(
+                feedbackConfig
+                    ?.fovKick
+            ) ||
+            (
+                weapon.id ===
+                    "awp"
+                    ? 1.35
+                    : 0.65
+            );
+
+
+        const recoverySpeed =
+            Number(
+                feedbackConfig
+                    ?.recoverySpeed
+            ) ||
+            (
+                weapon.id ===
+                    "awp"
+                    ? 13.5
+                    : 18
+            );
+
+
+        /*
+         * AWP 比 Scout 的镜头冲击明显更强。
+         *
+         * 这里故意只做“开枪后的视觉冲击”，
+         * 不修改刚刚那一发 Raycast 方向。
+         */
+        this.sniperShotFovKick =
+            Math.max(
+                this.sniperShotFovKick,
+                fovKick
+            );
+
+
+        this.sniperShotRecoverySpeed =
+            recoverySpeed;
+
+
+        return true;
+    }
+
+
+    updateSniperShotFeedback(
+        delta
+    ) {
+
+        if (
+            !this.camera
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !this.sniperScopeActive ||
+            this.sniperScopeLevel <=
+            0
+        ) {
+
+            this.sniperShotFovKick =
+                0;
+
+
+            return;
+        }
+
+
+        const baseFov =
+            this.getScopeFov(
+                this.sniperScopeLevel
+            );
+
+
+        if (
+            this.sniperShotFovKick >
+            0.0001
+        ) {
+
+            this.sniperShotFovKick =
+                Math.max(
+                    0,
+                    this.sniperShotFovKick -
+                    this.sniperShotRecoverySpeed *
+                    delta
+                );
+        }
+
+
+        const targetFov =
+            baseFov +
+            this.sniperShotFovKick;
+
+
+        if (
+            Math.abs(
+                this.camera.fov -
+                targetFov
+            ) >
+            0.0001
+        ) {
+
+            this.camera.fov =
+                targetFov;
+
+
+            this.camera
+                .updateProjectionMatrix();
+        }
     }
 
 
@@ -4069,6 +4271,11 @@ export class Game {
                 );
 
 
+            this.updateSniperShotFeedback(
+                delta
+            );
+
+
             this.resolvePlayerCollision();
 
         } else {
@@ -4486,7 +4693,10 @@ export class Game {
                     fov:
                         this.camera
                             ?.fov ??
-                        null
+                        null,
+
+                    shotFovKick:
+                        this.sniperShotFovKick
                 },
 
             radio:

@@ -634,8 +634,16 @@ export const WEAPON_CONFIG = freezeDeep({
             },
 
             scoped: {
-                stand: 0.0015,
-                crouch: 0.0008,
+                /*
+                 * Sniper Shooting Feedback V1
+                 *
+                 * 开镜静止 / 蹲下时：
+                 * 子弹严格沿 Scope 中心发射。
+                 *
+                 * 移动 / 跳跃仍保留明显惩罚。
+                 */
+                stand: 0.0000,
+                crouch: 0.0000,
                 move: 0.055,
                 air: 0.220
             }
@@ -968,8 +976,12 @@ export const WEAPON_CONFIG = freezeDeep({
             },
 
             scoped: {
-                stand: 0.0025,
-                crouch: 0.0015,
+                /*
+                 * Scout 开镜静止同样使用中心弹道，
+                 * 但移动时比 AWP 更稳定。
+                 */
+                stand: 0.0000,
+                crouch: 0.0000,
                 move: 0.035,
                 air: 0.130
             }
@@ -1601,7 +1613,25 @@ export const SNIPER_SCOPE_CONFIG = freezeDeep({
     // Legacy alias
     zoomFov: 28,
 
-    radiusVmin: 44
+    radiusVmin: 44,
+
+    // ====================================================
+    // Sniper Shooting Feedback V1
+    //
+    // 这里使用 FOV pulse 作为开枪后的镜头冲击反馈。
+    // 不修改当前这一发的真实弹道。
+    // ====================================================
+    shotFeedback: {
+        awp: {
+            fovKick: 1.35,
+            recoverySpeed: 13.5
+        },
+
+        scout: {
+            fovKick: 0.65,
+            recoverySpeed: 18.0
+        }
+    }
 });
 
 // ============================================================

@@ -954,6 +954,10 @@ export class Weapon {
                     ) || 0;
 
 
+                // ------------------------------------------------
+                // Airborne
+                // ------------------------------------------------
+
                 if (
                     airborne
                 ) {
@@ -965,16 +969,14 @@ export class Weapon {
                         ) ||
                         spread;
 
-                } else if (
-                    crouching
-                ) {
 
-                    spread =
-                        Number(
-                            sniperSpread
-                                .crouch
-                        ) ||
-                        spread;
+                // ------------------------------------------------
+                // Movement
+                //
+                // 先判断移动，再判断 crouch。
+                //
+                // 这样“蹲着移动”也不会得到静止蹲射精度。
+                // ------------------------------------------------
 
                 } else if (
                     movementFactor >
@@ -989,10 +991,23 @@ export class Weapon {
                         spread;
 
 
-                    spread +=
+                    const standReference =
+                        crouching
+                            ? (
+                                Number(
+                                    sniperSpread
+                                        .crouch
+                                ) ||
+                                spread
+                            )
+                            : spread;
+
+
+                    spread =
+                        standReference +
                         (
                             moveSpread -
-                            spread
+                            standReference
                         ) *
                         clamp(
                             Number(
@@ -1001,28 +1016,40 @@ export class Weapon {
                             0,
                             1
                         );
+
+
+                // ------------------------------------------------
+                // Crouch Static
+                // ------------------------------------------------
+
+                } else if (
+                    crouching
+                ) {
+
+                    spread =
+                        Number(
+                            sniperSpread
+                                .crouch
+                        ) ||
+                        spread;
                 }
 
 
-                const recoilSpreadPerBloom =
-                    Number(
-                        this.config.recoil
-                            ?.vertical ??
-                        0
-                    ) *
-                    0.030;
-
-
-                spread +=
-                    Math.max(
-                        0,
-                        Number(
-                            this.recoilBloom
-                        ) || 0
-                    ) *
-                    recoilSpreadPerBloom;
-
-
+                /*
+                 * 关键修复：
+                 *
+                 * 狙击枪开镜弹道不再叠加 recoilBloom。
+                 *
+                 * 原代码 fire() 会先 recoilBloom + 1，
+                 * 再计算当前这一发 spread，
+                 * 导致第一发即使 Scope 中心压在 BOT 身上，
+                 * 也可能因为 bloom 随机偏离。
+                 *
+                 * 现在：
+                 * - 当前子弹只由姿态 / 移动状态决定
+                 * - 开枪后的“重量感”交给 game.js 的视觉反馈
+                 * - 不再用当前这一发的 recoil 把子弹随机推离准心
+                 */
                 return Math.max(
                     0,
                     spread

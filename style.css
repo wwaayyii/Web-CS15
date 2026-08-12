@@ -2700,3 +2700,82 @@ body {
             );
     }
 }
+
+/* ==========================================================
+   SNIPER HUD LAYER FIX V1
+   ========================================================== */
+
+/*
+ * Scope 黑框只负责遮挡游戏世界，不再遮挡主要 HUD。
+ *
+ * Layer plan:
+ *   Canvas / world             0
+ *   Scope overlay          5000
+ *   Gameplay HUD           5200+
+ *   Scoreboard             7000
+ *   Game menus             9000
+ *   Pause / full overlays 12000+
+ *
+ * Flash / other full-screen gameplay effects如果使用更高层级，
+ * 仍可继续覆盖 HUD。
+ */
+
+.top-hud {
+    z-index: 5200;
+}
+
+.fps-counter {
+    z-index: 5200;
+}
+
+.bottom-left-hud,
+.bottom-right-hud {
+    z-index: 5200;
+}
+
+.hud-status,
+.freeze-hud,
+.spectate-hud {
+    z-index: 5250;
+}
+
+.kill-feed {
+    z-index: 5300;
+}
+
+.radio-message,
+.radio-history {
+    z-index: 5300;
+}
+
+.combat-feedback,
+.hitmarker {
+    z-index: 5350;
+}
+
+/*
+ * Radio / Buy / BOT 属于交互菜单。
+ * 即使未来允许 Scope 状态下打开菜单，
+ * 也必须显示在黑框上方。
+ */
+.radio-menu {
+    z-index: 9000;
+}
+
+.game-menu {
+    z-index: 9000;
+}
+
+/*
+ * TAB 战绩板应完整显示，不受 Scope 黑框影响。
+ */
+.scoreboard-overlay {
+    z-index: 7000;
+}
+
+/*
+ * Scope 自身仍保持在普通游戏画面上方。
+ */
+.sniper-scope-overlay {
+    z-index: 5000;
+}
