@@ -2,7 +2,7 @@
  * Web-CS15
  * src/weapons/droppedWeapon.js
  *
- * Dropped Weapon & Pickup System V1
+ * Dropped Weapon & Pickup System V1.4
  *
  * Features:
  * - G drops player's PRIMARY weapon
@@ -65,6 +65,54 @@ const DROP_FORWARD =
 
 const DROP_HEIGHT =
     0.12;
+
+const DROP_START_HEIGHT =
+    0.62;
+
+const GRAVITY =
+    12.5;
+
+const PICKUP_HINT_RADIUS =
+    3.4;
+
+
+const DROP_PROFILE = Object.freeze({
+    awp: {
+        forwardSpeed: 2.0,
+        upSpeed: 1.65,
+        spin: 4.2
+    },
+
+    scout: {
+        forwardSpeed: 2.35,
+        upSpeed: 1.85,
+        spin: 4.9
+    },
+
+    ak47: {
+        forwardSpeed: 2.45,
+        upSpeed: 1.95,
+        spin: 5.2
+    },
+
+    m4a1: {
+        forwardSpeed: 2.55,
+        upSpeed: 2.0,
+        spin: 5.4
+    },
+
+    mp5: {
+        forwardSpeed: 2.8,
+        upSpeed: 2.15,
+        spin: 6.2
+    },
+
+    default: {
+        forwardSpeed: 2.5,
+        upSpeed: 2.0,
+        spin: 5.5
+    }
+});
 
 
 function nowSeconds() {
@@ -162,7 +210,8 @@ export class DroppedWeapon {
         position,
         rotationY = 0,
         droppedBy = null,
-        scene = null
+        scene = null,
+        throwDirection = null
     } = {}) {
 
         this.weaponId =
@@ -214,6 +263,82 @@ export class DroppedWeapon {
         this.scene =
             scene;
 
+
+        const profile =
+            DROP_PROFILE[
+                weaponId
+            ] ||
+            DROP_PROFILE.default;
+
+
+        this.groundY =
+            (
+                position?.y ??
+                0
+            ) +
+            DROP_HEIGHT;
+
+
+        this.velocity =
+            new THREE.Vector3();
+
+
+        const direction =
+            throwDirection
+                ?.clone?.() ||
+            new THREE.Vector3(
+                0,
+                0,
+                -1
+            );
+
+
+        direction.y =
+            0;
+
+
+        if (
+            direction.lengthSq() >
+            0.0001
+        ) {
+
+            direction.normalize();
+
+        } else {
+
+            direction.set(
+                0,
+                0,
+                -1
+            );
+        }
+
+
+        this.velocity
+            .copy(
+                direction
+            )
+            .multiplyScalar(
+                profile.forwardSpeed
+            );
+
+
+        this.velocity.y =
+            profile.upSpeed;
+
+
+        this.angularVelocity =
+            new THREE.Vector3(
+                profile.spin * 0.55,
+                profile.spin,
+                profile.spin * 0.42
+            );
+
+
+        this.isResting =
+            false;
+
+
         this.model =
             createWorldWeaponModel(
                 weaponId
@@ -227,7 +352,7 @@ export class DroppedWeapon {
 
 
         this.model.position.y +=
-            DROP_HEIGHT;
+            DROP_START_HEIGHT;
 
 
         this.model.rotation.y =
@@ -242,6 +367,87 @@ export class DroppedWeapon {
         this.scene?.add(
             this.model
         );
+    }
+
+
+    update(
+        delta
+    ) {
+
+        if (
+            !this.model ||
+            this.isResting
+        ) {
+
+            return;
+        }
+
+
+        this.velocity.y -=
+            GRAVITY *
+            delta;
+
+
+        this.model.position
+            .addScaledVector(
+                this.velocity,
+                delta
+            );
+
+
+        this.model.rotation.x +=
+            this.angularVelocity.x *
+            delta;
+
+
+        this.model.rotation.y +=
+            this.angularVelocity.y *
+            delta;
+
+
+        this.model.rotation.z +=
+            this.angularVelocity.z *
+            delta;
+
+
+        if (
+            this.model.position.y <=
+            this.groundY
+        ) {
+
+            this.model.position.y =
+                this.groundY;
+
+
+            /*
+             * 第一版只做一次轻微落地缓冲，
+             * 然后稳定停止，避免枪在地上无限弹跳。
+             */
+            this.model.rotation.x =
+                0;
+
+
+            this.model.rotation.z =
+                0;
+
+
+            this.velocity.set(
+                0,
+                0,
+                0
+            );
+
+
+            this.angularVelocity.set(
+                0,
+                0,
+                0
+            );
+
+
+            this.isResting =
+                true;
+        }
     }
 
 
@@ -727,6 +933,12 @@ export class DroppedWeaponSystem {
             );
 
 
+        const throwDirection =
+            getEntityForward(
+                entity
+            );
+
+
         const item =
             new DroppedWeapon({
                 weaponId:
@@ -751,7 +963,9 @@ export class DroppedWeaponSystem {
                     entity,
 
                 scene:
-                    this.scene
+                    this.scene,
+
+                throwDirection
             });
 
 
@@ -982,7 +1196,29 @@ export class DroppedWeaponSystem {
     }
 
 
-    update() {
+    update(
+        delta = 0.016
+    ) {
+
+        for (
+            const item
+            of this.items
+        ) {
+
+            item.update(
+                delta
+            );
+        }
+
+
+        const player =
+            this.game?.player;
+
+
+        this.updatePlayerPickupHint(
+            player
+        );
+
 
         if (
             this.items.length ===
@@ -991,10 +1227,6 @@ export class DroppedWeaponSystem {
 
             return;
         }
-
-
-        const player =
-            this.game?.player;
 
 
         if (
@@ -1053,6 +1285,135 @@ export class DroppedWeaponSystem {
                 }
             );
         }
+    }
+
+
+    updatePlayerPickupHint(
+        player
+    ) {
+
+        if (
+            !player?.isAlive ||
+            this.items.length ===
+                0
+        ) {
+
+            gameEvents.emit(
+                "weapon:pickup-hint",
+                {
+                    owner:
+                        player,
+
+                    visible:
+                        false
+                }
+            );
+
+
+            return;
+        }
+
+
+        const position =
+            getEntityPosition(
+                player
+            );
+
+
+        if (!position) {
+
+            return;
+        }
+
+
+        let best =
+            null;
+
+        let bestDistance =
+            Infinity;
+
+
+        for (
+            const item
+            of this.items
+        ) {
+
+            const itemPosition =
+                item.getPosition();
+
+
+            const distance =
+                Math.hypot(
+                    itemPosition.x -
+                        position.x,
+
+                    itemPosition.z -
+                        position.z
+                );
+
+
+            if (
+                distance <=
+                    PICKUP_HINT_RADIUS &&
+                distance <
+                    bestDistance
+            ) {
+
+                best =
+                    item;
+
+                bestDistance =
+                    distance;
+            }
+        }
+
+
+        if (!best) {
+
+            gameEvents.emit(
+                "weapon:pickup-hint",
+                {
+                    owner:
+                        player,
+
+                    visible:
+                        false
+                }
+            );
+
+
+            return;
+        }
+
+
+        gameEvents.emit(
+            "weapon:pickup-hint",
+            {
+                owner:
+                    player,
+
+                visible:
+                    true,
+
+                weaponId:
+                    best.weaponId,
+
+                clipAmmo:
+                    best.clipAmmo,
+
+                reserveAmmo:
+                    best.reserveAmmo,
+
+                distance:
+                    bestDistance,
+
+                hasPrimary:
+                    Boolean(
+                        player.inventory
+                            ?.primaryWeapon
+                    )
+            }
+        );
     }
 
 
@@ -1170,6 +1531,18 @@ export class DroppedWeaponSystem {
 
         this.items.length =
             0;
+
+
+        gameEvents.emit(
+            "weapon:pickup-hint",
+            {
+                owner:
+                    this.game?.player,
+
+                visible:
+                    false
+            }
+        );
     }
 }
 

@@ -373,6 +373,22 @@ export class Bot {
 
         this.createHPBar();
 
+
+        /*
+         * BOT HP Bar Hidden V1
+         *
+         * 保留 HP Bar 对象、材质和 updateHPBar() 全部逻辑，
+         * 仅关闭显示，不改 Hitbox / Damage / Raycast。
+         */
+        if (
+            this.hpBarGroup
+        ) {
+
+            this.hpBarGroup.visible =
+                false;
+        }
+
+
         this.setupDefaultLoadout();
 
         this.syncWeaponModel();
@@ -3400,7 +3416,7 @@ export class Bot {
         ) {
 
             this.hpBarGroup.visible =
-                true;
+                false;
         }
 
 

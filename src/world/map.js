@@ -349,43 +349,159 @@ export class GameMap {
         this.materials.floor =
             new THREE.MeshStandardMaterial({
                 color:
-                    0xddeeff,
+                    0xe7f5ff,
 
                 roughness:
-                    0.92,
+                    0.96,
 
                 metalness:
-                    0
+                    0.02
             });
 
 
         this.materials.wall =
             new THREE.MeshStandardMaterial({
                 color:
-                    0x9ab5c8,
+                    0x8faebe,
 
                 roughness:
-                    0.78
+                    0.82,
+
+                metalness:
+                    0.02
             });
 
 
         this.materials.cover =
             new THREE.MeshStandardMaterial({
                 color:
-                    0x7892a3,
+                    0x58798f,
 
                 roughness:
-                    0.75
+                    0.62,
+
+                metalness:
+                    0.18
             });
 
 
         this.materials.crate =
             new THREE.MeshStandardMaterial({
                 color:
-                    0x7a5b37,
+                    0x825c32,
 
                 roughness:
-                    0.88
+                    0.90,
+
+                metalness:
+                    0.01
+            });
+
+
+        /*
+         * Decoration-only materials.
+         * 不加入碰撞 / Raycast。
+         */
+        this.materials.iceAccent =
+            new THREE.MeshStandardMaterial({
+                color:
+                    0xd7f3ff,
+
+                roughness:
+                    0.38,
+
+                metalness:
+                    0.04,
+
+                transparent:
+                    true,
+
+                opacity:
+                    0.52
+            });
+
+
+        this.materials.wallCap =
+            new THREE.MeshStandardMaterial({
+                color:
+                    0xcce8f5,
+
+                roughness:
+                    0.70
+            });
+
+
+        this.materials.crateTrim =
+            new THREE.MeshStandardMaterial({
+                color:
+                    0x4b3526,
+
+                roughness:
+                    0.78,
+
+                metalness:
+                    0.08
+            });
+
+
+        this.materials.metalAccent =
+            new THREE.MeshStandardMaterial({
+                color:
+                    0x5b7180,
+
+                roughness:
+                    0.46,
+
+                metalness:
+                    0.34
+            });
+
+
+        this.materials.snow =
+            new THREE.MeshStandardMaterial({
+                color: 0xf4fbff,
+                roughness: 0.98,
+                metalness: 0
+            });
+
+        this.materials.wallDetail =
+            new THREE.MeshStandardMaterial({
+                color: 0x7798ad,
+                roughness: 0.72,
+                metalness: 0.06
+            });
+
+        this.materials.mountainSnow =
+            new THREE.MeshStandardMaterial({
+                color: 0xeaf7ff,
+                roughness: 0.96,
+                metalness: 0
+            });
+
+        this.materials.wallBase =
+            new THREE.MeshStandardMaterial({
+                color: 0x58717f,
+                roughness: 0.86,
+                metalness: 0.02
+            });
+
+
+
+        this.materials.snowScuff =
+            new THREE.MeshStandardMaterial({
+                color: 0xb9d8e5,
+                roughness: 1.0,
+                metalness: 0,
+                transparent: true,
+                opacity: 0.34,
+                depthWrite: false
+            });
+
+        this.materials.mountainRock =
+            new THREE.MeshStandardMaterial({
+                color: 0x9fb9c9,
+                roughness: 0.92,
+                metalness: 0
             });
 
 
@@ -655,8 +771,13 @@ export class GameMap {
             resolvedSurfaceType;
 
 
+        /*
+         * Map Rendering V1:
+         * 地板只接收阴影；墙体/掩体/木箱投射阴影。
+         */
         object.castShadow =
-            true;
+            type !==
+            MAP_OBJECT_TYPE.FLOOR;
 
         object.receiveShadow =
             true;

@@ -139,6 +139,16 @@ export class Game {
 
         this.controls = null;
 
+
+        // ====================================================
+        // Sky Rendering V1
+        // ====================================================
+
+        this.skyDome = null;
+
+        this.cloudGroup = null;
+
+
         this.clock =
             new THREE.Clock();
 
@@ -394,6 +404,8 @@ export class Game {
         this.createControls();
 
         this.createLights();
+
+        this.createSkyEnvironment();
 
 
         // ====================================================
@@ -763,15 +775,19 @@ export class Game {
 
         this.scene.background =
             new THREE.Color(
-                0x9bbbd4
+                0x8fd0ff
             );
 
 
+        /*
+         * Map Rendering V1:
+         * 柔和蓝白雾，让地图边界与天空自然融合。
+         */
         this.scene.fog =
             new THREE.Fog(
-                0x9bbbd4,
-                70,
-                165
+                0xcdeeff,
+                82,
+                190
             );
     }
 
@@ -877,9 +893,9 @@ export class Game {
 
         const ambient =
             new THREE.HemisphereLight(
-                0xeaf6ff,
-                0x555566,
-                1.3
+                0xeaf8ff,
+                0x7d8f9f,
+                1.45
             );
 
 
@@ -890,15 +906,15 @@ export class Game {
 
         const sun =
             new THREE.DirectionalLight(
-                0xffffff,
-                1.35
+                0xfff4de,
+                1.45
             );
 
 
         sun.position.set(
-            30,
-            55,
-            -20
+            42,
+            68,
+            -36
         );
 
 
@@ -931,6 +947,431 @@ export class Game {
         this.scene.add(
             sun
         );
+    }
+
+
+
+    // ========================================================
+    // Sky Environment V1
+    //
+    // Procedural blue sky + white clouds.
+    // Pure Three.js / CanvasTexture, no external assets.
+    // ========================================================
+
+    createSkyEnvironment() {
+
+        this.disposeSkyEnvironment();
+
+
+        // ----------------------------------------------------
+        // Sky dome
+        // ----------------------------------------------------
+
+        const skyGeometry =
+            new THREE.SphereGeometry(
+                430,
+                32,
+                18
+            );
+
+
+        const skyMaterial =
+            new THREE.ShaderMaterial({
+                side:
+                    THREE.BackSide,
+
+                depthWrite:
+                    false,
+
+                uniforms: {
+                    topColor: {
+                        value:
+                            new THREE.Color(
+                                0x4b9fe3
+                            )
+                    },
+
+                    horizonColor: {
+                        value:
+                            new THREE.Color(
+                                0xe5f7ff
+                            )
+                    },
+
+                    exponent: {
+                        value:
+                            0.72
+                    }
+                },
+
+                vertexShader: `
+                    varying vec3 vWorldPosition;
+
+                    void main() {
+                        vec4 worldPosition =
+                            modelMatrix *
+                            vec4(position, 1.0);
+
+                        vWorldPosition =
+                            worldPosition.xyz;
+
+                        gl_Position =
+                            projectionMatrix *
+                            modelViewMatrix *
+                            vec4(position, 1.0);
+                    }
+                `,
+
+                fragmentShader: `
+                    uniform vec3 topColor;
+                    uniform vec3 horizonColor;
+                    uniform float exponent;
+
+                    varying vec3 vWorldPosition;
+
+                    void main() {
+                        vec3 direction =
+                            normalize(vWorldPosition);
+
+                        float h =
+                            clamp(
+                                direction.y * 0.5 + 0.5,
+                                0.0,
+                                1.0
+                            );
+
+                        h =
+                            pow(
+                                h,
+                                exponent
+                            );
+
+                        vec3 color =
+                            mix(
+                                horizonColor,
+                                topColor,
+                                h
+                            );
+
+                        gl_FragColor =
+                            vec4(color, 1.0);
+                    }
+                `
+            });
+
+
+        this.skyDome =
+            new THREE.Mesh(
+                skyGeometry,
+                skyMaterial
+            );
+
+
+        this.skyDome.name =
+            "SKY_DOME";
+
+
+        this.skyDome.frustumCulled =
+            false;
+
+
+        this.skyDome.userData
+            .ignoreHitbox =
+            true;
+
+
+        this.scene.add(
+            this.skyDome
+        );
+
+
+        // ----------------------------------------------------
+        // Clouds
+        // ----------------------------------------------------
+
+        this.cloudGroup =
+            new THREE.Group();
+
+
+        this.cloudGroup.name =
+            "SKY_CLOUDS";
+
+
+        const cloudTexture =
+            this.createCloudTexture();
+
+
+        const cloudMaterial =
+            new THREE.MeshBasicMaterial({
+                map:
+                    cloudTexture,
+
+                transparent:
+                    true,
+
+                opacity:
+                    0.82,
+
+                depthWrite:
+                    false,
+
+                side:
+                    THREE.DoubleSide,
+
+                blending:
+                    THREE.NormalBlending
+            });
+
+
+        const cloudPositions = [
+            [-125, 64, -155, 48, 18, 0.18],
+            [-70, 78, -185, 64, 23, -0.10],
+            [5, 68, -172, 45, 17, 0.07],
+            [78, 82, -165, 62, 22, -0.14],
+            [145, 66, -125, 50, 19, 0.10],
+            [-165, 72, -72, 58, 21, -0.08],
+            [158, 84, -30, 68, 24, 0.08],
+            [-170, 65, 45, 46, 17, -0.12],
+            [165, 70, 62, 54, 20, 0.11],
+            [-120, 86, 135, 70, 25, -0.16],
+            [-35, 70, 170, 48, 18, 0.08],
+            [48, 82, 178, 65, 23, -0.09],
+            [132, 68, 140, 50, 19, 0.16]
+        ];
+
+
+        for (
+            const [
+                x,
+                y,
+                z,
+                width,
+                height,
+                rotationZ
+            ]
+            of cloudPositions
+        ) {
+
+            const cloud =
+                new THREE.Mesh(
+                    new THREE.PlaneGeometry(
+                        width,
+                        height
+                    ),
+                    cloudMaterial
+                );
+
+
+            cloud.position.set(
+                x,
+                y,
+                z
+            );
+
+
+            cloud.rotation.x =
+                -Math.PI / 2 +
+                0.12;
+
+
+            cloud.rotation.z =
+                rotationZ;
+
+
+            cloud.userData.ignoreHitbox =
+                true;
+
+
+            this.cloudGroup.add(
+                cloud
+            );
+        }
+
+
+        this.scene.add(
+            this.cloudGroup
+        );
+    }
+
+
+    createCloudTexture() {
+
+        const canvas =
+            document.createElement(
+                "canvas"
+            );
+
+
+        canvas.width =
+            256;
+
+        canvas.height =
+            128;
+
+
+        const context =
+            canvas.getContext(
+                "2d"
+            );
+
+
+        context.clearRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+
+        const circles = [
+            [62, 76, 34],
+            [93, 59, 42],
+            [128, 68, 48],
+            [164, 59, 38],
+            [193, 78, 31],
+            [120, 88, 60]
+        ];
+
+
+        for (
+            const [
+                x,
+                y,
+                radius
+            ]
+            of circles
+        ) {
+
+            const gradient =
+                context.createRadialGradient(
+                    x,
+                    y,
+                    radius * 0.18,
+                    x,
+                    y,
+                    radius
+                );
+
+
+            gradient.addColorStop(
+                0,
+                "rgba(255,255,255,0.98)"
+            );
+
+
+            gradient.addColorStop(
+                0.58,
+                "rgba(255,255,255,0.88)"
+            );
+
+
+            gradient.addColorStop(
+                1,
+                "rgba(255,255,255,0)"
+            );
+
+
+            context.fillStyle =
+                gradient;
+
+
+            context.beginPath();
+
+            context.arc(
+                x,
+                y,
+                radius,
+                0,
+                Math.PI * 2
+            );
+
+            context.fill();
+        }
+
+
+        const texture =
+            new THREE.CanvasTexture(
+                canvas
+            );
+
+
+        texture.colorSpace =
+            THREE.SRGBColorSpace;
+
+
+        texture.needsUpdate =
+            true;
+
+
+        return texture;
+    }
+
+
+    disposeSkyEnvironment() {
+
+        if (
+            this.skyDome
+        ) {
+
+            this.skyDome.geometry
+                ?.dispose?.();
+
+            this.skyDome.material
+                ?.dispose?.();
+
+            this.skyDome.removeFromParent();
+
+            this.skyDome =
+                null;
+        }
+
+
+        if (
+            this.cloudGroup
+        ) {
+
+            const disposedMaterials =
+                new Set();
+
+
+            this.cloudGroup.traverse(
+                object => {
+
+                    object.geometry
+                        ?.dispose?.();
+
+
+                    const material =
+                        object.material;
+
+
+                    if (
+                        material &&
+                        !disposedMaterials.has(
+                            material
+                        )
+                    ) {
+
+                        material.map
+                            ?.dispose?.();
+
+                        material.dispose?.();
+
+                        disposedMaterials.add(
+                            material
+                        );
+                    }
+                }
+            );
+
+
+            this.cloudGroup
+                .removeFromParent();
+
+
+            this.cloudGroup =
+                null;
+        }
     }
 
 
@@ -4882,6 +5323,9 @@ export class Game {
 
         this.weaponView =
             null;
+
+
+        this.disposeSkyEnvironment();
 
 
         // ====================================================

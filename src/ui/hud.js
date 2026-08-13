@@ -96,6 +96,8 @@ export class HUDSystem {
 
             grenadeIndicator: null,
 
+            pickupHint: null,
+
             flashOverlay: null,
 
             sniperScope: null
@@ -290,6 +292,11 @@ export class HUDSystem {
 
 
         this.createGrenadeIndicator(
+            root
+        );
+
+
+        this.createWeaponPickupHint(
             root
         );
 
@@ -858,6 +865,61 @@ export class HUDSystem {
 
 
         // ----------------------------------------------------
+        // Dropped Weapon Pickup Hint V1
+        // ----------------------------------------------------
+
+        this.handlers.weaponPickupHint =
+            data => {
+
+                if (
+                    data.owner &&
+                    data.owner !==
+                    this.player
+                ) {
+
+                    return;
+                }
+
+
+                this.updateWeaponPickupHint(
+                    data
+                );
+            };
+
+
+        this.handlers.worldWeaponPickup =
+            data => {
+
+                if (
+                    data.owner !==
+                    this.player
+                ) {
+
+                    return;
+                }
+
+
+                const name =
+                    data.weapon
+                        ?.name ||
+                    data.weaponId ||
+                    "weapon";
+
+
+                this.showTemporaryStatus(
+                    `Picked up ${name}`,
+                    850
+                );
+
+
+                this.updateWeaponPickupHint({
+                    visible:
+                        false
+                });
+            };
+
+
+        // ----------------------------------------------------
         // Flashbang V1
         // ----------------------------------------------------
 
@@ -1062,6 +1124,18 @@ export class HUDSystem {
         gameEvents.on(
             "grenade:flash",
             this.handlers.grenadeFlash
+        );
+
+
+        gameEvents.on(
+            "weapon:pickup-hint",
+            this.handlers.weaponPickupHint
+        );
+
+
+        gameEvents.on(
+            "weapon:world-pickup",
+            this.handlers.worldWeaponPickup
         );
 
 
@@ -1550,6 +1624,168 @@ export class HUDSystem {
 
 
     // ========================================================
+    // Dropped Weapon Pickup Hint V1
+    // ========================================================
+
+    createWeaponPickupHint(
+        root = document
+    ) {
+
+        let element =
+            root.getElementById(
+                "weapon-pickup-hint"
+            );
+
+
+        if (!element) {
+
+            element =
+                document.createElement(
+                    "div"
+                );
+
+
+            element.id =
+                "weapon-pickup-hint";
+
+
+            element.style.position =
+                "fixed";
+
+            element.style.left =
+                "50%";
+
+            element.style.bottom =
+                "150px";
+
+            element.style.transform =
+                "translateX(-50%)";
+
+            element.style.zIndex =
+                "5400";
+
+            element.style.padding =
+                "7px 12px";
+
+            element.style.border =
+                "1px solid rgba(255,255,255,.22)";
+
+            element.style.background =
+                "rgba(8,12,16,.72)";
+
+            element.style.color =
+                "#f0f4f7";
+
+            element.style.fontFamily =
+                "Arial, Helvetica, sans-serif";
+
+            element.style.fontSize =
+                "12px";
+
+            element.style.fontWeight =
+                "700";
+
+            element.style.letterSpacing =
+                ".6px";
+
+            element.style.pointerEvents =
+                "none";
+
+            element.style.userSelect =
+                "none";
+
+            element.style.display =
+                "none";
+
+
+            document.body.appendChild(
+                element
+            );
+        }
+
+
+        this.elements.pickupHint =
+            element;
+    }
+
+
+    updateWeaponPickupHint(
+        data = {}
+    ) {
+
+        const element =
+            this.elements
+                .pickupHint;
+
+
+        if (!element) {
+
+            return;
+        }
+
+
+        if (
+            !data.visible
+        ) {
+
+            element.style.display =
+                "none";
+
+
+            return;
+        }
+
+
+        const weaponName =
+            String(
+                data.weaponId ||
+                "WEAPON"
+            )
+                .toUpperCase();
+
+
+        const clip =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(
+                        data.clipAmmo
+                    ) || 0
+                )
+            );
+
+
+        const reserve =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(
+                        data.reserveAmmo
+                    ) || 0
+                )
+            );
+
+
+        if (
+            data.hasPrimary
+        ) {
+
+            element.textContent =
+                `${weaponName}  ${clip} / ${reserve}   •   Press G to drop current primary`;
+
+        } else {
+
+            element.textContent =
+                `${weaponName}  ${clip} / ${reserve}   •   Move closer to pick up`;
+        }
+
+
+        element.style.display =
+            "block";
+    }
+
+
+    // ========================================================
     // Sniper Scope V1
     // ========================================================
 
@@ -1662,6 +1898,21 @@ export class HUDSystem {
 
             this.elements
                 .grenadeIndicator
+                .style
+                .visibility =
+                active
+                    ? "hidden"
+                    : "visible";
+        }
+
+
+        if (
+            this.elements
+                .pickupHint
+        ) {
+
+            this.elements
+                .pickupHint
                 .style
                 .visibility =
                 active
@@ -3266,6 +3517,18 @@ export class HUDSystem {
 
 
         gameEvents.off(
+            "weapon:pickup-hint",
+            this.handlers.weaponPickupHint
+        );
+
+
+        gameEvents.off(
+            "weapon:world-pickup",
+            this.handlers.worldWeaponPickup
+        );
+
+
+        gameEvents.off(
             "ui:buy-success",
             this.handlers.buySuccess
         );
@@ -3313,7 +3576,15 @@ export class HUDSystem {
             ?.remove?.();
 
 
+        this.elements
+            .pickupHint
+            ?.remove?.();
+
+
         this.elements.grenadeIndicator =
+            null;
+
+        this.elements.pickupHint =
             null;
 
         this.elements.flashOverlay =

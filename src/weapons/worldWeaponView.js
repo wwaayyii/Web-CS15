@@ -34,7 +34,10 @@ export function createWorldWeaponModel(
 
     /*
      * botWeaponView 的枪默认沿 -Z。
-     * 地面武器侧躺，并稍微抬高避免 Z-fighting。
+     *
+     * Dropped Weapon V1.4:
+     * 地面枪采用“侧躺 + 轻微斜角”的稳定姿态。
+     * 真正的抛出旋转由 droppedWeapon.js 控制 root。
      */
     model.rotation.z =
         Math.PI / 2;
@@ -42,6 +45,10 @@ export function createWorldWeaponModel(
 
     model.rotation.y =
         Math.PI * 0.08;
+
+
+    model.position.y =
+        0.035;
 
 
     root.add(
