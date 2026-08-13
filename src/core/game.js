@@ -4787,6 +4787,18 @@ export class Game {
 
 
         // ====================================================
+        // Dropped Weapons - Performance V2
+        //
+        // 统一使用 Game 主循环。
+        // droppedWeapon.js 不再启动第二套 RAF。
+        // ====================================================
+
+        droppedWeaponSystem.update(
+            delta
+        );
+
+
+        // ====================================================
         // Effects
         // ====================================================
 
@@ -5267,6 +5279,10 @@ export class Game {
         round.destroy();
 
         effects.destroy();
+
+
+        droppedWeaponSystem.destroy();
+
 
         map.destroy();
 

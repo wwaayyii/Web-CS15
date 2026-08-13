@@ -2,7 +2,7 @@
  * Web-CS15
  * src/weapons/droppedWeapon.js
  *
- * Dropped Weapon & Pickup System V1.4
+ * Dropped Weapon & Pickup System V1.5 / Performance V2
  *
  * Features:
  * - G drops player's PRIMARY weapon
@@ -13,6 +13,7 @@
  * - Player only auto-picks a primary when the primary slot is empty
  * - Ground weapons are cleared automatically at every new round
  * - Short owner pickup lock prevents instant re-pickup
+ * - Uses the main Game update loop; no second requestAnimationFrame
  *
  * Integration:
  *
@@ -585,24 +586,18 @@ export class DroppedWeaponSystem {
         this.initialized =
             false;
 
-        this.lastFrameTime =
-            0;
 
-        this._raf =
-            null;
-
-
+        /*
+         * Performance V2:
+         * 不再拥有独立 requestAnimationFrame。
+         *
+         * droppedWeaponSystem.update(delta)
+         * 统一由 Game 主循环调用。
+         */
         this._boundKeyDown =
             event =>
                 this.onKeyDown(
                     event
-                );
-
-
-        this._boundFrame =
-            time =>
-                this.frame(
-                    time
                 );
     }
 
@@ -718,59 +713,7 @@ export class DroppedWeaponSystem {
             true;
 
 
-        this.lastFrameTime =
-            performance.now();
-
-
-        this._raf =
-            requestAnimationFrame(
-                this._boundFrame
-            );
-
-
         return this;
-    }
-
-
-    frame(
-        time
-    ) {
-
-        const delta =
-            Math.min(
-                0.1,
-                Math.max(
-                    0,
-                    (
-                        time -
-                        this.lastFrameTime
-                    ) /
-                    1000
-                )
-            );
-
-
-        this.lastFrameTime =
-            time;
-
-
-        if (
-            this.game
-                ?.gameplayStarted &&
-            !this.game
-                ?.paused
-        ) {
-
-            this.update(
-                delta
-            );
-        }
-
-
-        this._raf =
-            requestAnimationFrame(
-                this._boundFrame
-            );
     }
 
 
@@ -1515,6 +1458,32 @@ export class DroppedWeaponSystem {
             best,
             entity
         );
+    }
+
+
+    // ========================================================
+    // Destroy
+    // ========================================================
+
+    destroy() {
+
+        document.removeEventListener(
+            "keydown",
+            this._boundKeyDown
+        );
+
+
+        this.clear();
+
+
+        this.game =
+            null;
+
+        this.scene =
+            null;
+
+        this.initialized =
+            false;
     }
 
 

@@ -141,6 +141,18 @@ export class GameMap {
 
         this.collisionObjects = [];
 
+
+        // ====================================================
+        // Performance V1 - Static Collision Cache
+        //
+        // 地图墙 / Cover / Crate 都是静态物体。
+        // Box3 在加载时只计算一次，运行时直接复用。
+        // ====================================================
+
+        this.collisionBoxCache =
+            new Map();
+
+
         this.weaponTargets = [];
 
         this.grenadeCollisionObjects = [];
@@ -789,6 +801,40 @@ export class GameMap {
 
 
         if (collision) {
+
+            /*
+             * Static Collision Cache V1
+             *
+             * setFromObject() 会更新/读取 world matrix，
+             * 因此只在地图构建阶段执行一次。
+             *
+             * 之后 resolvePositionCollision() 不再：
+             * - new THREE.Box3()
+             * - setFromObject()
+             * - box.clone()
+             */
+            object.updateMatrixWorld?.(
+                true
+            );
+
+
+            const collisionBox =
+                new THREE.Box3()
+                    .setFromObject(
+                        object
+                    );
+
+
+            this.collisionBoxCache.set(
+                object,
+                collisionBox
+            );
+
+
+            object.userData
+                .collisionBoxCached =
+                true;
+
 
             this.collisionObjects.push(
                 object
@@ -2439,114 +2485,191 @@ export class GameMap {
             }
 
 
-            const box =
-                new THREE.Box3()
-                    .setFromObject(
+            /*
+             * Performance V1:
+             * 地图静态 AABB 已经在 addMapObject() 时缓存。
+             *
+             * 理论上所有 collisionObjects 都应该命中缓存。
+             * fallback 仅用于兼容以后可能直接 push 进数组的旧代码。
+             */
+            let box =
+                this.collisionBoxCache
+                    .get(
                         object
                     );
 
 
-            const expanded =
-                box.clone();
+            if (!box) {
+
+                object.updateMatrixWorld?.(
+                    true
+                );
 
 
-            expanded.min.x -=
+                box =
+                    new THREE.Box3()
+                        .setFromObject(
+                            object
+                        );
+
+
+                this.collisionBoxCache.set(
+                    object,
+                    box
+                );
+            }
+
+
+            /*
+             * 不再 clone Box3。
+             * 直接用缓存 min/max + radius 得到扩展边界。
+             */
+            const minX =
+                box.min.x -
                 radius;
 
-            expanded.max.x +=
+            const maxX =
+                box.max.x +
                 radius;
 
-            expanded.min.z -=
+            const minZ =
+                box.min.z -
                 radius;
 
-            expanded.max.z +=
+            const maxZ =
+                box.max.z +
                 radius;
 
 
             if (
                 result.x >
-                    expanded.min.x &&
+                    minX &&
 
                 result.x <
-                    expanded.max.x &&
+                    maxX &&
 
                 result.z >
-                    expanded.min.z &&
+                    minZ &&
 
                 result.z <
-                    expanded.max.z
+                    maxZ
             ) {
 
-                const distances = {
-                    left:
-                        Math.abs(
-                            result.x -
-                            expanded.min.x
-                        ),
+                const distanceLeft =
+                    Math.abs(
+                        result.x -
+                        minX
+                    );
 
-                    right:
-                        Math.abs(
-                            expanded.max.x -
-                            result.x
-                        ),
+                const distanceRight =
+                    Math.abs(
+                        maxX -
+                        result.x
+                    );
 
-                    top:
-                        Math.abs(
-                            result.z -
-                            expanded.min.z
-                        ),
+                const distanceTop =
+                    Math.abs(
+                        result.z -
+                        minZ
+                    );
 
-                    bottom:
-                        Math.abs(
-                            expanded.max.z -
-                            result.z
-                        )
-                };
+                const distanceBottom =
+                    Math.abs(
+                        maxZ -
+                        result.z
+                    );
 
 
                 const smallest =
                     Math.min(
-                        distances.left,
-                        distances.right,
-                        distances.top,
-                        distances.bottom
+                        distanceLeft,
+                        distanceRight,
+                        distanceTop,
+                        distanceBottom
                     );
 
 
                 if (
                     smallest ===
-                    distances.left
+                    distanceLeft
                 ) {
 
                     result.x =
-                        expanded.min.x;
+                        minX;
 
                 } else if (
                     smallest ===
-                    distances.right
+                    distanceRight
                 ) {
 
                     result.x =
-                        expanded.max.x;
+                        maxX;
 
                 } else if (
                     smallest ===
-                    distances.top
+                    distanceTop
                 ) {
 
                     result.z =
-                        expanded.min.z;
+                        minZ;
 
                 } else {
 
                     result.z =
-                        expanded.max.z;
+                        maxZ;
                 }
             }
         }
 
 
         return result;
+    }
+
+
+    // ========================================================
+    // Refresh Static Collision Cache
+    //
+    // 当前地图物体不会移动，正常游戏无需调用。
+    // 如果以后加入“可移动墙体/箱子”，移动完成后可调用：
+    //
+    // map.refreshCollisionBox(object)
+    // ========================================================
+
+    refreshCollisionBox(
+        object
+    ) {
+
+        if (
+            !object ||
+            !this.collisionObjects
+                .includes(
+                    object
+                )
+        ) {
+
+            return null;
+        }
+
+
+        object.updateMatrixWorld?.(
+            true
+        );
+
+
+        const box =
+            new THREE.Box3()
+                .setFromObject(
+                    object
+                );
+
+
+        this.collisionBoxCache.set(
+            object,
+            box
+        );
+
+
+        return box;
     }
 
 
@@ -2796,6 +2919,10 @@ export class GameMap {
         this.collisionObjects.length =
             0;
 
+
+        this.collisionBoxCache.clear();
+
+
         this.weaponTargets.length =
             0;
 
@@ -2873,6 +3000,10 @@ export class GameMap {
             collisionObjects:
                 this.collisionObjects
                     .length,
+
+            collisionBoxesCached:
+                this.collisionBoxCache
+                    .size,
 
             weaponTargets:
                 this.weaponTargets
