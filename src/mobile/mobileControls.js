@@ -1,79 +1,60 @@
 // ============================================================
-// WEB-CS15 Mobile Controls V2.2 - Touch Input Bridge
+// WEB-CS15 Mobile Controls V3
 //
-// Global fixes in this file also work on desktop:
-// - structuredClone fallback for older Android browsers
-// - Hide gameplay HUD while the Main Menu is visible
+// Mobile input now reuses the desktop game input path:
+// - Joystick -> game.keys (W/A/S/D)
+// - FIRE -> Player fire API
+// - Touch look -> camera quaternion
 //
-// Mobile-only code below keeps the existing V2 touch controls.
+// Also includes:
+// - structuredClone fallback
+// - Mobile landscape menu
+// - Main-menu HUD hiding
+// - Fullscreen attempt
+// - Jump / Reload / Crouch / Weapon / Grenade / Scope
 // ============================================================
 
+
 // ============================================================
-// structuredClone Compatibility
+// Compatibility
 // ============================================================
 
 if (
     typeof globalThis.structuredClone !==
     "function"
 ) {
+    const cloneFallback = value => {
+        if (
+            value === null ||
+            typeof value !== "object"
+        ) {
+            return value;
+        }
 
-    const cloneFallback =
-        value => {
+        if (
+            Array.isArray(value)
+        ) {
+            return value.map(cloneFallback);
+        }
 
-            if (
-                value === null ||
-                typeof value !==
-                    "object"
-            ) {
-                return value;
-            }
+        if (
+            value instanceof Date
+        ) {
+            return new Date(value.getTime());
+        }
 
+        const copy = {};
 
-            if (
-                Array.isArray(
-                    value
-                )
-            ) {
+        for (
+            const [key, item]
+            of Object.entries(value)
+        ) {
+            copy[key] =
+                cloneFallback(item);
+        }
 
-                return value.map(
-                    cloneFallback
-                );
-            }
-
-
-            if (
-                value instanceof Date
-            ) {
-
-                return new Date(
-                    value.getTime()
-                );
-            }
-
-
-            const copy = {};
-
-
-            for (
-                const [
-                    key,
-                    item
-                ]
-                of Object.entries(
-                    value
-                )
-            ) {
-
-                copy[key] =
-                    cloneFallback(
-                        item
-                    );
-            }
-
-
-            return copy;
-        };
-
+        return copy;
+    };
 
     globalThis.structuredClone =
         cloneFallback;
@@ -81,206 +62,111 @@ if (
 
 
 // ============================================================
-// Main Menu HUD Visibility - Desktop + Mobile
+// Global main-menu HUD handling
+// Works on desktop + mobile because this file loads before game.js.
 // ============================================================
 
-const installMainMenuHUDFix =
-    () => {
+const GAMEPLAY_HUD_SELECTORS = [
+    ".top-hud",
+    ".bottom-left-hud",
+    ".bottom-right-hud",
+    "#fps-counter",
+    "#nav-debug-toggle",
+    "#freeze-hud",
+    "#spectate-hud",
+    "#kill-feed",
+    "#radio-message",
+    "#radio-history",
+    "#radio-menu",
+    "#tab-scoreboard",
+    "#hud-status",
+    "#crosshair",
+    "#hitmarker",
+    "#damage-indicator",
+    "#grenade-indicator",
+    "#weapon-pickup-hint",
+    "#sniper-scope"
+];
 
-        const style =
-            document.createElement(
-                "style"
+
+function setGlobalGameplayHUDVisible(
+    visible
+) {
+    for (
+        const selector
+        of GAMEPLAY_HUD_SELECTORS
+    ) {
+        const elements =
+            document.querySelectorAll(
+                selector
             );
 
+        for (
+            const element
+            of elements
+        ) {
+            element.style.visibility =
+                visible
+                    ? ""
+                    : "hidden";
 
-        style.id =
-            "webcs-main-menu-hud-fix";
-
-
-        style.textContent = `
-            html.webcs-main-menu-open #hud-hp,
-            html.webcs-main-menu-open #hud-armor,
-            html.webcs-main-menu-open #hud-money,
-
-            html.webcs-main-menu-open #hud-ammo-clip,
-            html.webcs-main-menu-open #hud-ammo-reserve,
-            html.webcs-main-menu-open #hud-weapon-name,
-
-            html.webcs-main-menu-open #round-timer,
-            html.webcs-main-menu-open #round-number,
-
-            html.webcs-main-menu-open #team-a-score,
-            html.webcs-main-menu-open #team-b-score,
-
-            html.webcs-main-menu-open #freeze-hud,
-            html.webcs-main-menu-open #spectate-hud,
-
-            html.webcs-main-menu-open #kill-feed,
-            html.webcs-main-menu-open #tab-scoreboard,
-
-            html.webcs-main-menu-open #radio-message,
-            html.webcs-main-menu-open #radio-history,
-            html.webcs-main-menu-open #radio-menu,
-
-            html.webcs-main-menu-open #hud-status,
-
-            html.webcs-main-menu-open #crosshair,
-            html.webcs-main-menu-open #hitmarker,
-            html.webcs-main-menu-open #damage-indicator,
-
-            html.webcs-main-menu-open #grenade-indicator,
-            html.webcs-main-menu-open #weapon-pickup-hint,
-            html.webcs-main-menu-open #sniper-scope,
-
-            html.webcs-main-menu-open #fps-counter,
-            html.webcs-main-menu-open #nav-debug-toggle,
-
-            html.webcs-main-menu-open .top-hud,
-            html.webcs-main-menu-open .bottom-left-hud,
-            html.webcs-main-menu-open .bottom-right-hud {
-                visibility: hidden !important;
-                pointer-events: none !important;
-            }
-        `;
+            element.style.pointerEvents =
+                visible
+                    ? ""
+                    : "none";
+        }
+    }
+}
 
 
-        document.head.appendChild(
-            style
+function isStartMenuVisible() {
+    const overlay =
+        document.getElementById(
+            "start-overlay"
         );
 
+    if (!overlay) {
+        return false;
+    }
 
-        const sync =
-            () => {
+    const style =
+        getComputedStyle(
+            overlay
+        );
 
-                const overlay =
-                    document.getElementById(
-                        "start-overlay"
-                    );
-
-
-                let menuOpen =
-                    true;
-
-
-                if (
-                    overlay
-                ) {
-
-                    const overlayStyle =
-                        getComputedStyle(
-                            overlay
-                        );
+    return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        Number(style.opacity || 1) !== 0
+    );
+}
 
 
-                    menuOpen =
-                        overlayStyle.display !==
-                            "none" &&
-                        overlayStyle.visibility !==
-                            "hidden" &&
-                        Number(
-                            overlayStyle.opacity ||
-                            1
-                        ) !==
-                            0;
-                }
+function syncGlobalHUD() {
+    const game =
+        window.webCS15;
 
+    const menuOpen =
+        !game?.gameplayStarted ||
+        isStartMenuVisible();
 
-                document.documentElement
-                    .classList
-                    .toggle(
-                        "webcs-main-menu-open",
-                        menuOpen
-                    );
-            };
-
-
-        const bind =
-            () => {
-
-                const overlay =
-                    document.getElementById(
-                        "start-overlay"
-                    );
-
-
-                sync();
-
-
-                if (
-                    overlay
-                ) {
-
-                    const observer =
-                        new MutationObserver(
-                            sync
-                        );
-
-
-                    observer.observe(
-                        overlay,
-                        {
-                            attributes:
-                                true,
-
-                            attributeFilter: [
-                                "style",
-                                "class",
-                                "hidden"
-                            ]
-                        }
-                    );
-                }
-            };
-
-
-        if (
-            document.readyState ===
-            "loading"
-        ) {
-
-            document.addEventListener(
-                "DOMContentLoaded",
-                bind,
-                {
-                    once:
-                        true
-                }
-            );
-
-        } else {
-
-            bind();
-        }
-    };
-
-
-installMainMenuHUDFix();
+    setGlobalGameplayHUDVisible(
+        !menuOpen
+    );
+}
 
 
 // ============================================================
-// WEB-CS15 Mobile Controls V2
-//
-// Consolidated mobile support:
-// - Mobile detection
-// - Landscape rotate prompt
-// - Mobile start-menu layout
-// - Left/right menu scrolling
-// - Hide gameplay HUD while start menu is open
-// - Fullscreen / landscape lock (best effort)
-// - Virtual joystick movement
-// - Touch look
-// - FIRE / JUMP / RELOAD / CROUCH
-// - WEAPON / GRENADE / SCOPE
-//
-// Desktop input/gameplay logic is not modified.
+// Mobile detection
 // ============================================================
-
-const MOBILE_QUERY = "(pointer: coarse), (hover: none)";
 
 const isMobileDevice = () =>
-    window.matchMedia?.(MOBILE_QUERY)?.matches ||
+    navigator.maxTouchPoints > 0 ||
     "ontouchstart" in window ||
-    navigator.maxTouchPoints > 0;
+    window.matchMedia?.(
+        "(pointer: coarse)"
+    )?.matches;
+
 
 if (isMobileDevice()) {
 
@@ -288,1105 +174,424 @@ if (isMobileDevice()) {
         game: null,
         enabled: false,
 
-        joystickPointer: null,
-        lookPointer: null,
+        joystickTouchId: null,
+        lookTouchId: null,
 
-        lookX: 0,
-        lookY: 0,
-
-        weaponCycle: 0,
-
-        menuOpen: true,
-
-        moveInput: {
-            forward: false,
-            backward: false,
-            left: false,
-            right: false,
-            walk: false
-        },
-
-        inputBridgeInstalled: false
+        crouching: false,
+        weaponIndex: 0
     };
-
-
-    // ========================================================
-    // Helpers
-    // ========================================================
-
-    const clamp = (
-        value,
-        min,
-        max
-    ) =>
-        Math.max(
-            min,
-            Math.min(
-                max,
-                value
-            )
-        );
-
-
-    const waitForGame =
-        () =>
-            new Promise(
-                resolve => {
-
-                    const check =
-                        () => {
-
-                            if (
-                                window.webCS15?.player &&
-                                window.webCS15?.camera
-                            ) {
-
-                                resolve(
-                                    window.webCS15
-                                );
-
-                                return;
-                            }
-
-
-                            requestAnimationFrame(
-                                check
-                            );
-                        };
-
-
-                    check();
-                }
-            );
 
 
     // ========================================================
     // CSS
     // ========================================================
 
-    const injectCSS =
-        () => {
-
-            const style =
-                document.createElement(
-                    "style"
-                );
-
-
-            style.id =
-                "webcs-mobile-style-v2";
-
-
-            style.textContent = `
-
-                /* =============================================
-                   Base Mobile
-                ============================================== */
-
-                html.webcs-mobile-menu,
-                html.webcs-mobile-menu body {
-                    width: 100%;
-                    height: 100%;
-                    margin: 0;
-                    overflow: hidden;
-                    overscroll-behavior: contain;
-                    touch-action: pan-y;
-                    background: #000;
-                }
-
-
-                html.webcs-mobile-game,
-                html.webcs-mobile-game body {
-                    width: 100%;
-                    height: 100%;
-                    margin: 0;
-                    overflow: hidden;
-                    overscroll-behavior: none;
-                    touch-action: none;
-                    background: #000;
-                }
-
-
-                /* =============================================
-                   Start Menu
-                ============================================== */
-
-                body.webcs-mobile #start-overlay {
-                    position: fixed !important;
-
-                    inset: 0 !important;
-
-                    width: 100vw !important;
-                    height: 100dvh !important;
-
-                    max-width: none !important;
-                    max-height: none !important;
-
-                    padding: 0 !important;
-                    margin: 0 !important;
-
-                    overflow: hidden !important;
-                }
-
-
-                body.webcs-mobile .start-panel {
-                    box-sizing: border-box !important;
-
-                    width: min(
-                        98vw,
-                        1050px
-                    ) !important;
-
-                    height: calc(
-                        100dvh - 10px
-                    ) !important;
-
-                    max-height: calc(
-                        100dvh - 10px
-                    ) !important;
-
-                    margin:
-                        5px auto !important;
-
-                    padding:
-                        8px 10px !important;
-
-                    overflow:
-                        hidden !important;
-                }
-
-
-                body.webcs-mobile .start-menu-layout {
-                    display: grid !important;
-
-                    grid-template-columns:
-                        minmax(0, 1.6fr)
-                        minmax(260px, .9fr)
-                        !important;
-
-                    gap:
-                        10px !important;
-
-                    width:
-                        100% !important;
-
-                    height:
-                        100% !important;
-
-                    min-height:
-                        0 !important;
-
-                    max-height:
-                        100% !important;
-
-                    align-items:
-                        stretch !important;
-
-                    overflow:
-                        hidden !important;
-                }
-
-
-                body.webcs-mobile .start-menu-left,
-                body.webcs-mobile .how-to-play-panel {
-                    box-sizing:
-                        border-box !important;
-
-                    min-width:
-                        0 !important;
-
-                    min-height:
-                        0 !important;
-
-                    height:
-                        100% !important;
-
-                    max-height:
-                        100% !important;
-
-                    overflow-x:
-                        hidden !important;
-
-                    overflow-y:
-                        auto !important;
-
-                    overscroll-behavior-y:
-                        contain !important;
-
-                    -webkit-overflow-scrolling:
-                        touch !important;
-
-                    touch-action:
-                        pan-y !important;
-
-                    padding-bottom:
-                        38px !important;
-                }
-
-
-                body.webcs-mobile .start-menu-left {
-                    padding-right:
-                        8px !important;
-                }
-
-
-                body.webcs-mobile .map-select-panel,
-                body.webcs-mobile .setup-panel {
-                    margin-top:
-                        7px !important;
-
-                    margin-bottom:
-                        7px !important;
-
-                    padding-top:
-                        7px !important;
-
-                    padding-bottom:
-                        7px !important;
-                }
-
-
-                body.webcs-mobile .game-logo {
-                    margin-top:
-                        0 !important;
-
-                    line-height:
-                        1 !important;
-                }
-
-
-                body.webcs-mobile .game-subtitle {
-                    margin-top:
-                        4px !important;
-
-                    margin-bottom:
-                        6px !important;
-                }
-
-
-                body.webcs-mobile #start-button {
-                    margin-bottom:
-                        28px !important;
-                }
-
-
-                body.webcs-mobile .start-menu-left::-webkit-scrollbar,
-                body.webcs-mobile .how-to-play-panel::-webkit-scrollbar {
-                    width:
-                        5px;
-                }
-
-
-                body.webcs-mobile .start-menu-left::-webkit-scrollbar-thumb,
-                body.webcs-mobile .how-to-play-panel::-webkit-scrollbar-thumb {
-                    background:
-                        rgba(
-                            62,
-                            198,
-                            255,
-                            .45
-                        );
-
-                    border-radius:
-                        5px;
-                }
-
-
-                /* =============================================
-                   Hide gameplay HUD while Main Menu is visible
-                ============================================== */
-
-                html.webcs-mobile-menu .top-hud,
-
-                html.webcs-mobile-menu .bottom-left-hud,
-
-                html.webcs-mobile-menu .bottom-right-hud,
-
-                html.webcs-mobile-menu .hud-status,
-
-                html.webcs-mobile-menu .freeze-hud,
-
-                html.webcs-mobile-menu .spectate-hud,
-
-                html.webcs-mobile-menu .kill-feed,
-
-                html.webcs-mobile-menu .radio-message,
-
-                html.webcs-mobile-menu .radio-history,
-
-                html.webcs-mobile-menu .scoreboard-overlay,
-
-                html.webcs-mobile-menu #fps-counter,
-
-                html.webcs-mobile-menu #nav-debug-toggle,
-
-                html.webcs-mobile-menu #crosshair,
-
-                html.webcs-mobile-menu #hitmarker,
-
-                html.webcs-mobile-menu #damage-indicator {
-                    display:
-                        none !important;
-                }
-
-
-                /* =============================================
-                   Mobile Controls
-                ============================================== */
-
-                #mobile-controls {
-                    position:
-                        fixed;
-
-                    inset:
-                        0;
-
-                    z-index:
-                        9700;
-
-                    pointer-events:
-                        none;
-
-                    user-select:
-                        none;
-
-                    -webkit-user-select:
-                        none;
-
-                    touch-action:
-                        none;
-
-                    display:
-                        none;
-                }
-
-
-                #mobile-controls.active {
-                    display:
-                        block;
-                }
-
-
-                #mobile-look-zone {
-                    position:
-                        absolute;
-
-                    top:
-                        0;
-
-                    right:
-                        0;
-
-                    width:
-                        58%;
-
-                    height:
-                        100%;
-
-                    pointer-events:
-                        auto;
-
-                    touch-action:
-                        none;
-
-                    z-index:
-                        10;
-                }
-
-
-                .mobile-joystick {
-                    position:
-                        absolute;
-
-                    left:
-                        max(
-                            22px,
-                            env(
-                                safe-area-inset-left
-                            )
-                        );
-
-                    bottom:
-                        max(
-                            24px,
-                            env(
-                                safe-area-inset-bottom
-                            )
-                        );
-
-                    width:
-                        142px;
-
-                    height:
-                        142px;
-
-                    border-radius:
-                        50%;
-
-                    border:
-                        2px solid
-                        rgba(
-                            255,
-                            255,
-                            255,
-                            .28
-                        );
-
-                    background:
-                        rgba(
-                            10,
-                            18,
-                            25,
-                            .32
-                        );
-
-                    box-shadow:
-                        inset
-                        0
-                        0
-                        24px
-                        rgba(
-                            0,
-                            0,
-                            0,
-                            .35
-                        );
-
-                    pointer-events:
-                        auto;
-
-                    touch-action:
-                        none;
-
-                    z-index:
-                        30;
-                }
-
-
-                .mobile-stick {
-                    position:
-                        absolute;
-
-                    left:
-                        50%;
-
-                    top:
-                        50%;
-
-                    width:
-                        62px;
-
-                    height:
-                        62px;
-
-                    margin:
-                        -31px;
-
-                    border-radius:
-                        50%;
-
-                    border:
-                        2px solid
-                        rgba(
-                            255,
-                            255,
-                            255,
-                            .65
-                        );
-
-                    background:
-                        rgba(
-                            62,
-                            198,
-                            255,
-                            .38
-                        );
-
-                    box-shadow:
-                        0
-                        0
-                        18px
-                        rgba(
-                            62,
-                            198,
-                            255,
-                            .28
-                        );
-
-                    transform:
-                        translate(
-                            0,
-                            0
-                        );
-                }
-
-
-                .mobile-actions {
-                    position:
-                        absolute;
-
-                    right:
-                        max(
-                            18px,
-                            env(
-                                safe-area-inset-right
-                            )
-                        );
-
-                    bottom:
-                        max(
-                            18px,
-                            env(
-                                safe-area-inset-bottom
-                            )
-                        );
-
-                    width:
-                        238px;
-
-                    height:
-                        190px;
-
-                    pointer-events:
-                        none;
-
-                    z-index:
-                        30;
-                }
-
-
-                .mobile-btn {
-                    position:
-                        absolute;
-
-                    min-width:
-                        60px;
-
-                    height:
-                        52px;
-
-                    padding:
-                        0 10px;
-
-                    border-radius:
-                        10px;
-
-                    border:
-                        1px solid
-                        rgba(
-                            255,
-                            255,
-                            255,
-                            .42
-                        );
-
-                    background:
-                        rgba(
-                            10,
-                            18,
-                            25,
-                            .62
-                        );
-
-                    color:
-                        #fff;
-
-                    font:
-                        700 11px
-                        Arial,
-                        Helvetica,
-                        sans-serif;
-
-                    letter-spacing:
-                        .5px;
-
-                    box-shadow:
-                        0
-                        3px
-                        14px
-                        rgba(
-                            0,
-                            0,
-                            0,
-                            .28
-                        );
-
-                    pointer-events:
-                        auto;
-
-                    touch-action:
-                        none;
-
-                    z-index:
-                        31;
-                }
-
-
-                .mobile-btn:active,
-                .mobile-btn.active {
-                    background:
-                        rgba(
-                            38,
-                            119,
-                            162,
-                            .86
-                        );
-
-                    border-color:
-                        #66d4ff;
-                }
-
-
-                #mobile-fire {
-                    right:
-                        0;
-
-                    bottom:
-                        46px;
-
-                    width:
-                        86px;
-
-                    height:
-                        86px;
-
-                    border-radius:
-                        50%;
-
-                    font-size:
-                        13px;
-                }
-
-
-                #mobile-jump {
-                    right:
-                        92px;
-
-                    bottom:
-                        0;
-                }
-
-
-                #mobile-reload {
-                    right:
-                        96px;
-
-                    bottom:
-                        58px;
-                }
-
-
-                #mobile-crouch {
-                    right:
-                        166px;
-
-                    bottom:
-                        0;
-                }
-
-
-                #mobile-weapon {
-                    right:
-                        166px;
-
-                    bottom:
-                        58px;
-                }
-
-
-                #mobile-grenade {
-                    right:
-                        96px;
-
-                    bottom:
-                        116px;
-                }
-
-
-                #mobile-scope {
-                    right:
-                        0;
-
-                    bottom:
-                        140px;
-                }
-
-
-                #mobile-fullscreen {
-                    position:
-                        absolute;
-
-                    top:
-                        max(
-                            12px,
-                            env(
-                                safe-area-inset-top
-                            )
-                        );
-
-                    right:
-                        max(
-                            12px,
-                            env(
-                                safe-area-inset-right
-                            )
-                        );
-
-                    width:
-                        48px;
-
-                    height:
-                        34px;
-
-                    min-width:
-                        48px;
-
-                    opacity:
-                        .76;
-
-                    z-index:
-                        40;
-                }
-
-
-                /* =============================================
-                   Rotate Overlay
-                ============================================== */
-
-                #mobile-rotate-overlay {
-                    position:
-                        fixed;
-
-                    inset:
-                        0;
-
-                    z-index:
-                        20000;
-
-                    display:
-                        none;
-
-                    align-items:
-                        center;
-
-                    justify-content:
-                        center;
-
-                    flex-direction:
-                        column;
-
-                    gap:
-                        14px;
-
-                    padding:
-                        28px;
-
-                    background:
-                        #071018;
-
-                    color:
-                        white;
-
-                    text-align:
-                        center;
-
-                    font-family:
-                        Arial,
-                        Helvetica,
-                        sans-serif;
-                }
-
-
-                #mobile-rotate-overlay
-                .rotate-icon {
-                    font-size:
-                        58px;
-
-                    line-height:
-                        1;
-                }
-
-
-                #mobile-rotate-overlay
-                strong {
-                    font-size:
-                        20px;
-
-                    letter-spacing:
-                        2px;
-                }
-
-
-                #mobile-rotate-overlay
-                span {
-                    color:
-                        #8ea4b2;
-
-                    font-size:
-                        12px;
-
-                    letter-spacing:
-                        1px;
-                }
-
-
-                @media
-                    (orientation: portrait)
-                    and
-                    (pointer: coarse) {
-
-                    #mobile-rotate-overlay {
-                        display:
-                            flex;
-                    }
-                }
-
-
-                @media
-                    (orientation: landscape)
-                    and
-                    (max-height: 520px) {
-
-                    .mobile-joystick {
-                        width:
-                            124px;
-
-                        height:
-                            124px;
-                    }
-
-
-                    .mobile-stick {
-                        width:
-                            56px;
-
-                        height:
-                            56px;
-
-                        margin:
-                            -28px;
-                    }
-
-
-                    .mobile-actions {
-                        transform:
-                            scale(
-                                .88
-                            );
-
-                        transform-origin:
-                            right bottom;
-                    }
-
-
-                    body.webcs-mobile
-                    .start-panel {
-                        height:
-                            calc(
-                                100dvh - 6px
-                            ) !important;
-
-                        max-height:
-                            calc(
-                                100dvh - 6px
-                            ) !important;
-
-                        margin:
-                            3px auto !important;
-
-                        padding:
-                            6px 8px !important;
-                    }
-
-
-                    body.webcs-mobile
-                    .start-menu-layout {
-                        gap:
-                            8px !important;
-                    }
-                }
-            `;
-
-
-            document.head.appendChild(
-                style
-            );
-        };
+    const style =
+        document.createElement(
+            "style"
+        );
+
+    style.id =
+        "webcs-mobile-controls-v3";
+
+    style.textContent = `
+        html,
+        body {
+            overscroll-behavior: none;
+        }
+
+        body.webcs-mobile {
+            touch-action: manipulation;
+        }
+
+        body.webcs-mobile #start-overlay {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100dvh !important;
+            overflow: hidden !important;
+        }
+
+        body.webcs-mobile .start-panel {
+            box-sizing: border-box !important;
+            width: min(98vw, 1050px) !important;
+            height: calc(100dvh - 8px) !important;
+            max-height: calc(100dvh - 8px) !important;
+            margin: 4px auto !important;
+            padding: 8px 10px !important;
+            overflow: hidden !important;
+        }
+
+        body.webcs-mobile .start-menu-layout {
+            display: grid !important;
+            grid-template-columns:
+                minmax(0, 1.6fr)
+                minmax(260px, .9fr)
+                !important;
+            gap: 10px !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+        }
+
+        body.webcs-mobile .start-menu-left,
+        body.webcs-mobile .how-to-play-panel {
+            min-height: 0 !important;
+            height: 100% !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-y !important;
+            overscroll-behavior-y: contain !important;
+            padding-bottom: 38px !important;
+        }
+
+        #mobile-controls {
+            position: fixed;
+            inset: 0;
+            z-index: 15000;
+            display: none;
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        #mobile-controls.active {
+            display: block;
+        }
+
+        #mobile-look-zone {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 62%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: auto;
+            touch-action: none;
+            background: transparent;
+        }
+
+        #mobile-joystick {
+            position: absolute;
+            left: max(30px, env(safe-area-inset-left));
+            bottom: max(30px, env(safe-area-inset-bottom));
+            width: 142px;
+            height: 142px;
+            z-index: 40;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.32);
+            background: rgba(14,24,34,.28);
+            box-shadow: inset 0 0 24px rgba(0,0,0,.32);
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        #mobile-stick {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 64px;
+            height: 64px;
+            margin-left: -32px;
+            margin-top: -32px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.75);
+            background: rgba(66,183,239,.48);
+            transform: translate(0, 0);
+            pointer-events: none;
+        }
+
+        #mobile-actions {
+            position: absolute;
+            right: max(14px, env(safe-area-inset-right));
+            bottom: max(14px, env(safe-area-inset-bottom));
+            width: 315px;
+            height: 210px;
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        .mobile-btn {
+            position: absolute;
+            z-index: 60;
+            min-width: 72px;
+            height: 58px;
+            border: 2px solid rgba(255,255,255,.35);
+            border-radius: 12px;
+            background: rgba(20,31,42,.74);
+            color: white;
+            font: 700 13px Arial, sans-serif;
+            pointer-events: auto;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .mobile-btn.active {
+            background: rgba(39,130,178,.94);
+            border-color: #78dbff;
+        }
+
+        #mobile-fire {
+            right: 0;
+            bottom: 38px;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+        }
+
+        #mobile-scope {
+            right: 0;
+            bottom: 148px;
+            width: 82px;
+        }
+
+        #mobile-reload {
+            right: 108px;
+            bottom: 52px;
+        }
+
+        #mobile-jump {
+            right: 108px;
+            bottom: 0;
+        }
+
+        #mobile-grenade {
+            right: 108px;
+            bottom: 114px;
+        }
+
+        #mobile-weapon {
+            right: 188px;
+            bottom: 52px;
+        }
+
+        #mobile-crouch {
+            right: 188px;
+            bottom: 0;
+        }
+
+        #mobile-fullscreen {
+            position: absolute;
+            top: max(10px, env(safe-area-inset-top));
+            right: max(10px, env(safe-area-inset-right));
+            z-index: 80;
+            width: 68px;
+            height: 48px;
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,.35);
+            background: rgba(20,31,42,.72);
+            color: #fff;
+            font: 700 13px Arial, sans-serif;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        #mobile-rotate-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 30000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 14px;
+            background: #071018;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        #mobile-rotate-overlay strong {
+            font-size: 20px;
+            letter-spacing: 2px;
+        }
+
+        #mobile-rotate-overlay span {
+            color: #91a4af;
+            font-size: 12px;
+        }
+
+        @media (orientation: portrait) {
+            #mobile-rotate-overlay {
+                display: flex;
+            }
+        }
+
+        @media (orientation: landscape) and (max-height: 520px) {
+            #mobile-joystick {
+                width: 126px;
+                height: 126px;
+            }
+
+            #mobile-stick {
+                width: 58px;
+                height: 58px;
+                margin-left: -29px;
+                margin-top: -29px;
+            }
+
+            #mobile-actions {
+                transform: scale(.90);
+                transform-origin: right bottom;
+            }
+        }
+    `;
+
+    document.head.appendChild(
+        style
+    );
 
 
     // ========================================================
     // DOM
     // ========================================================
 
-    const makeButton =
+    document.body.classList.add(
+        "webcs-mobile"
+    );
+
+
+    const rotateOverlay =
+        document.createElement(
+            "div"
+        );
+
+    rotateOverlay.id =
+        "mobile-rotate-overlay";
+
+    rotateOverlay.innerHTML = `
+        <div style="font-size:56px">↻</div>
+        <strong>ROTATE YOUR DEVICE</strong>
+        <span>LANDSCAPE MODE REQUIRED</span>
+    `;
+
+    document.body.appendChild(
+        rotateOverlay
+    );
+
+
+    const root =
+        document.createElement(
+            "div"
+        );
+
+    root.id =
+        "mobile-controls";
+
+    root.innerHTML = `
+        <div id="mobile-look-zone"></div>
+
+        <div id="mobile-joystick">
+            <div id="mobile-stick"></div>
+        </div>
+
+        <div id="mobile-actions">
+            <button class="mobile-btn" id="mobile-fire">FIRE</button>
+            <button class="mobile-btn" id="mobile-scope">SCOPE</button>
+            <button class="mobile-btn" id="mobile-reload">RELOAD</button>
+            <button class="mobile-btn" id="mobile-jump">JUMP</button>
+            <button class="mobile-btn" id="mobile-grenade">GRENADE</button>
+            <button class="mobile-btn" id="mobile-weapon">WEAPON</button>
+            <button class="mobile-btn" id="mobile-crouch">CROUCH</button>
+        </div>
+
+        <button id="mobile-fullscreen">FULL</button>
+    `;
+
+    document.body.appendChild(
+        root
+    );
+
+
+    // ========================================================
+    // Helpers
+    // ========================================================
+
+    const getGame =
+        () =>
+            state.game ||
+            window.webCS15;
+
+
+    const findTouch =
         (
-            id,
-            label
+            touchList,
+            identifier
         ) => {
+            for (
+                const touch
+                of touchList
+            ) {
+                if (
+                    touch.identifier ===
+                    identifier
+                ) {
+                    return touch;
+                }
+            }
 
-            const button =
-                document.createElement(
-                    "button"
-                );
-
-
-            button.id =
-                id;
-
-
-            button.type =
-                "button";
-
-
-            button.className =
-                "mobile-btn";
-
-
-            button.textContent =
-                label;
-
-
-            return button;
+            return null;
         };
 
 
-    const createDOM =
+    const clearMovementKeys =
         () => {
+            const game =
+                getGame();
 
-            document.body
-                .classList
-                .add(
-                    "webcs-mobile"
-                );
+            if (!game?.keys) {
+                return;
+            }
 
-
-            const rotate =
-                document.createElement(
-                    "div"
-                );
-
-
-            rotate.id =
-                "mobile-rotate-overlay";
+            game.keys.delete("KeyW");
+            game.keys.delete("KeyS");
+            game.keys.delete("KeyA");
+            game.keys.delete("KeyD");
+        };
 
 
-            rotate.innerHTML =
-                `
-                <div class="rotate-icon">
-                    ↻
-                </div>
+    const setMovementKeys =
+        ({
+            forward = false,
+            backward = false,
+            left = false,
+            right = false
+        } = {}) => {
+            const game =
+                getGame();
 
-                <strong>
-                    ROTATE YOUR DEVICE
-                </strong>
+            if (!game?.keys) {
+                return;
+            }
 
-                <span>
-                    WEB CS 1.5 REQUIRES LANDSCAPE MODE
-                </span>
-                `;
+            const apply =
+                (
+                    code,
+                    active
+                ) => {
+                    if (active) {
+                        game.keys.add(code);
+                    } else {
+                        game.keys.delete(code);
+                    }
+                };
 
-
-            document.body.appendChild(
-                rotate
-            );
-
-
-            const root =
-                document.createElement(
-                    "div"
-                );
-
-
-            root.id =
-                "mobile-controls";
-
-
-            root.innerHTML =
-                `
-                <div
-                    id="mobile-look-zone"
-                    aria-label="Touch look area"
-                ></div>
-
-                <div
-                    id="mobile-joystick"
-                    class="mobile-joystick"
-                >
-                    <div
-                        id="mobile-stick"
-                        class="mobile-stick"
-                    ></div>
-                </div>
-
-                <div
-                    class="mobile-actions"
-                    id="mobile-actions"
-                ></div>
-                `;
+            apply("KeyW", forward);
+            apply("KeyS", backward);
+            apply("KeyA", left);
+            apply("KeyD", right);
+        };
 
 
-            const actions =
-                root.querySelector(
-                    "#mobile-actions"
-                );
+    const stopAllTouchActions =
+        () => {
+            clearMovementKeys();
 
-
-            actions.append(
-                makeButton(
-                    "mobile-fire",
-                    "FIRE"
-                ),
-
-                makeButton(
-                    "mobile-jump",
-                    "JUMP"
-                ),
-
-                makeButton(
-                    "mobile-reload",
-                    "RELOAD"
-                ),
-
-                makeButton(
-                    "mobile-crouch",
-                    "CROUCH"
-                ),
-
-                makeButton(
-                    "mobile-weapon",
-                    "WEAPON"
-                ),
-
-                makeButton(
-                    "mobile-grenade",
-                    "GRENADE"
-                ),
-
-                makeButton(
-                    "mobile-scope",
-                    "SCOPE"
-                )
-            );
-
-
-            const fullscreen =
-                makeButton(
-                    "mobile-fullscreen",
-                    "FULL"
-                );
-
-
-            root.appendChild(
-                fullscreen
-            );
-
-
-            document.body.appendChild(
-                root
-            );
-
-
-            return root;
+            getGame()
+                ?.player
+                ?.stopFire?.();
         };
 
 
@@ -1396,121 +601,840 @@ if (isMobileDevice()) {
 
     const requestFullscreen =
         async () => {
-
             try {
-
-                const target =
-                    document.documentElement;
-
-
                 if (
                     !document.fullscreenElement &&
-                    target.requestFullscreen
+                    document.documentElement
+                        .requestFullscreen
                 ) {
-
-                    await target
+                    await document
+                        .documentElement
                         .requestFullscreen({
                             navigationUI:
                                 "hide"
                         });
                 }
-
             } catch (_) {
             }
 
-
             try {
-
-                if (
-                    screen.orientation
-                        ?.lock
-                ) {
-
-                    await screen
-                        .orientation
-                        .lock(
-                            "landscape"
-                        );
-                }
-
+                await screen
+                    .orientation
+                    ?.lock?.(
+                        "landscape"
+                    );
             } catch (_) {
             }
         };
 
 
     // ========================================================
-    // Menu / HUD / Touch mode
+    // Joystick -> existing game.keys
     // ========================================================
 
-    const isStartOverlayVisible =
-        () => {
+    const joystick =
+        document.getElementById(
+            "mobile-joystick"
+        );
 
-            const overlay =
-                document.getElementById(
-                    "start-overlay"
-                );
+    const stick =
+        document.getElementById(
+            "mobile-stick"
+        );
 
 
-            if (!overlay) {
-                return false;
+    const updateJoystick =
+        touch => {
+            if (!touch) {
+                return;
             }
 
+            const rect =
+                joystick
+                    .getBoundingClientRect();
 
-            const style =
-                getComputedStyle(
-                    overlay
+            const centerX =
+                rect.left +
+                rect.width / 2;
+
+            const centerY =
+                rect.top +
+                rect.height / 2;
+
+            const maxRadius =
+                rect.width * 0.34;
+
+            let dx =
+                touch.clientX -
+                centerX;
+
+            let dy =
+                touch.clientY -
+                centerY;
+
+            const distance =
+                Math.hypot(
+                    dx,
+                    dy
                 );
 
+            if (
+                distance >
+                maxRadius
+            ) {
+                dx =
+                    dx /
+                    distance *
+                    maxRadius;
 
-            return (
-                style.display !==
-                    "none" &&
-                style.visibility !==
-                    "hidden" &&
-                Number(
-                    style.opacity ||
-                    1
-                ) !==
-                    0
+                dy =
+                    dy /
+                    distance *
+                    maxRadius;
+            }
+
+            stick.style.transform =
+                `translate(${dx}px, ${dy}px)`;
+
+            const x =
+                dx /
+                maxRadius;
+
+            const y =
+                dy /
+                maxRadius;
+
+            const deadZone =
+                0.24;
+
+            setMovementKeys({
+                forward:
+                    y < -deadZone,
+
+                backward:
+                    y > deadZone,
+
+                left:
+                    x < -deadZone,
+
+                right:
+                    x > deadZone
+            });
+        };
+
+
+    const resetJoystick =
+        () => {
+            state.joystickTouchId =
+                null;
+
+            stick.style.transform =
+                "translate(0, 0)";
+
+            clearMovementKeys();
+        };
+
+
+    joystick.addEventListener(
+        "touchstart",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (
+                !state.enabled ||
+                state.joystickTouchId !==
+                    null
+            ) {
+                return;
+            }
+
+            const touch =
+                event.changedTouches[0];
+
+            if (!touch) {
+                return;
+            }
+
+            state.joystickTouchId =
+                touch.identifier;
+
+            updateJoystick(
+                touch
+            );
+        },
+        {
+            passive:
+                false
+        }
+    );
+
+
+    joystick.addEventListener(
+        "touchmove",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const touch =
+                findTouch(
+                    event.touches,
+                    state.joystickTouchId
+                );
+
+            if (!touch) {
+                return;
+            }
+
+            updateJoystick(
+                touch
+            );
+        },
+        {
+            passive:
+                false
+        }
+    );
+
+
+    const endJoystick =
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const touch =
+                findTouch(
+                    event.changedTouches,
+                    state.joystickTouchId
+                );
+
+            if (touch) {
+                resetJoystick();
+            }
+        };
+
+
+    joystick.addEventListener(
+        "touchend",
+        endJoystick,
+        {
+            passive:
+                false
+        }
+    );
+
+    joystick.addEventListener(
+        "touchcancel",
+        endJoystick,
+        {
+            passive:
+                false
+        }
+    );
+
+
+    // ========================================================
+    // Touch Look
+    // ========================================================
+
+    const lookZone =
+        document.getElementById(
+            "mobile-look-zone"
+        );
+
+    let lastLookX =
+        0;
+
+    let lastLookY =
+        0;
+
+
+    lookZone.addEventListener(
+        "touchstart",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (
+                !state.enabled ||
+                state.lookTouchId !==
+                    null
+            ) {
+                return;
+            }
+
+            const touch =
+                event.changedTouches[0];
+
+            if (!touch) {
+                return;
+            }
+
+            state.lookTouchId =
+                touch.identifier;
+
+            lastLookX =
+                touch.clientX;
+
+            lastLookY =
+                touch.clientY;
+        },
+        {
+            passive:
+                false
+        }
+    );
+
+
+    lookZone.addEventListener(
+        "touchmove",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const touch =
+                findTouch(
+                    event.touches,
+                    state.lookTouchId
+                );
+
+            if (!touch) {
+                return;
+            }
+
+            const game =
+                getGame();
+
+            const camera =
+                game?.camera;
+
+            if (!camera) {
+                return;
+            }
+
+            const dx =
+                touch.clientX -
+                lastLookX;
+
+            const dy =
+                touch.clientY -
+                lastLookY;
+
+            lastLookX =
+                touch.clientX;
+
+            lastLookY =
+                touch.clientY;
+
+            const sensitivity =
+                0.0030;
+
+            camera.rotation.order =
+                "YXZ";
+
+            camera.rotation.y -=
+                dx *
+                sensitivity;
+
+            camera.rotation.x -=
+                dy *
+                sensitivity;
+
+            const limit =
+                Math.PI / 2 -
+                0.06;
+
+            camera.rotation.x =
+                Math.max(
+                    -limit,
+                    Math.min(
+                        limit,
+                        camera.rotation.x
+                    )
+                );
+        },
+        {
+            passive:
+                false
+        }
+    );
+
+
+    const endLook =
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const touch =
+                findTouch(
+                    event.changedTouches,
+                    state.lookTouchId
+                );
+
+            if (touch) {
+                state.lookTouchId =
+                    null;
+            }
+        };
+
+
+    lookZone.addEventListener(
+        "touchend",
+        endLook,
+        {
+            passive:
+                false
+        }
+    );
+
+    lookZone.addEventListener(
+        "touchcancel",
+        endLook,
+        {
+            passive:
+                false
+        }
+    );
+
+
+    // ========================================================
+    // Block synthetic mouse events from mobile controls
+    // ========================================================
+
+    root.addEventListener(
+        "mousedown",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true
+    );
+
+    root.addEventListener(
+        "mouseup",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true
+    );
+
+    root.addEventListener(
+        "click",
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true
+    );
+
+
+    // ========================================================
+    // Button helper
+    // ========================================================
+
+    const bindTouchButton =
+        (
+            id,
+            onStart,
+            onEnd = null
+        ) => {
+            const button =
+                document.getElementById(
+                    id
+                );
+
+            if (!button) {
+                return;
+            }
+
+            button.addEventListener(
+                "touchstart",
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    if (!state.enabled) {
+                        return;
+                    }
+
+                    button.classList.add(
+                        "active"
+                    );
+
+                    onStart?.();
+                },
+                {
+                    passive:
+                        false
+                }
+            );
+
+            const end =
+                event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    button.classList.remove(
+                        "active"
+                    );
+
+                    onEnd?.();
+                };
+
+            button.addEventListener(
+                "touchend",
+                end,
+                {
+                    passive:
+                        false
+                }
+            );
+
+            button.addEventListener(
+                "touchcancel",
+                end,
+                {
+                    passive:
+                        false
+                }
             );
         };
 
 
-    const syncMobileMode =
+    // ========================================================
+    // FIRE
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-fire",
+
         () => {
-
             const game =
-                state.game ||
-                window.webCS15;
+                getGame();
 
+            const player =
+                game?.player;
+
+            if (
+                !player?.isAlive
+            ) {
+                return;
+            }
+
+            if (
+                player.grenadeMode
+            ) {
+                if (
+                    player
+                        .beginGrenadePrime?.()
+                ) {
+                    game
+                        ?.weaponView
+                        ?.beginGrenadePrime?.();
+                }
+            } else {
+                player.startFire?.();
+            }
+        },
+
+        () => {
+            const game =
+                getGame();
+
+            const player =
+                game?.player;
+
+            if (
+                player?.grenadeMode
+            ) {
+                if (
+                    player
+                        .releaseGrenadePrime?.()
+                ) {
+                    game
+                        ?.weaponView
+                        ?.releaseGrenadeThrow?.();
+                }
+            } else {
+                player?.stopFire?.();
+            }
+        }
+    );
+
+
+    // ========================================================
+    // Jump
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-jump",
+
+        () => {
+            getGame()
+                ?.player
+                ?.jump?.();
+        }
+    );
+
+
+    // ========================================================
+    // Reload
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-reload",
+
+        () => {
+            const game =
+                getGame();
+
+            game
+                ?.exitSniperScope?.({
+                    restoreWeaponView:
+                        true
+                });
+
+            game
+                ?.player
+                ?.reload?.();
+        }
+    );
+
+
+    // ========================================================
+    // Crouch toggle
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-crouch",
+
+        () => {
+            const player =
+                getGame()
+                    ?.player;
+
+            if (!player) {
+                return;
+            }
+
+            state.crouching =
+                !state.crouching;
+
+            player
+                .setCrouching?.(
+                    state.crouching
+                );
+        }
+    );
+
+
+    // ========================================================
+    // Weapon
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-weapon",
+
+        () => {
+            const game =
+                getGame();
+
+            const player =
+                game?.player;
+
+            if (!player) {
+                return;
+            }
+
+            game
+                ?.exitSniperScope?.({
+                    restoreWeaponView:
+                        true
+                });
+
+            state.weaponIndex =
+                (
+                    state.weaponIndex +
+                    1
+                ) %
+                3;
+
+            if (
+                state.weaponIndex ===
+                0
+            ) {
+                player
+                    .equipPrimary?.();
+            } else if (
+                state.weaponIndex ===
+                1
+            ) {
+                player
+                    .equipSecondary?.();
+            } else {
+                player
+                    .equipKnife?.();
+            }
+        }
+    );
+
+
+    // ========================================================
+    // Grenade
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-grenade",
+
+        () => {
+            const game =
+                getGame();
+
+            game
+                ?.exitSniperScope?.({
+                    restoreWeaponView:
+                        false
+                });
+
+            if (
+                !game
+                    ?.weaponView
+                    ?.isGrenadeBusy?.()
+            ) {
+                game
+                    ?.player
+                    ?.cycleGrenadeSlot?.();
+            }
+        }
+    );
+
+
+    // ========================================================
+    // Scope
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-scope",
+
+        () => {
+            getGame()
+                ?.toggleSniperScope?.();
+        }
+    );
+
+
+    // ========================================================
+    // Fullscreen
+    // ========================================================
+
+    const fullscreenButton =
+        document.getElementById(
+            "mobile-fullscreen"
+        );
+
+    fullscreenButton
+        ?.addEventListener(
+            "touchstart",
+            event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                requestFullscreen();
+            },
+            {
+                passive:
+                    false
+            }
+        );
+
+
+    // ========================================================
+    // Start button
+    // ========================================================
+
+    const startButton =
+        document.getElementById(
+            "start-button"
+        );
+
+    startButton
+        ?.addEventListener(
+            "touchend",
+            () => {
+                requestFullscreen();
+            },
+            {
+                passive:
+                    true
+            }
+        );
+
+
+    // ========================================================
+    // Game lifecycle
+    // ========================================================
+
+    const waitForGame =
+        () =>
+            new Promise(
+                resolve => {
+                    const tick =
+                        () => {
+                            if (
+                                window
+                                    .webCS15
+                                    ?.player &&
+                                window
+                                    .webCS15
+                                    ?.camera
+                            ) {
+                                resolve(
+                                    window
+                                        .webCS15
+                                );
+
+                                return;
+                            }
+
+                            requestAnimationFrame(
+                                tick
+                            );
+                        };
+
+                    tick();
+                }
+            );
+
+
+    waitForGame()
+        .then(
+            game => {
+                state.game =
+                    game;
+
+                console.log(
+                    "[WEB-CS15] Mobile Controls V3 ready"
+                );
+            }
+        );
+
+
+    // ========================================================
+    // Continuous mode synchronization
+    // ========================================================
+
+    const syncMode =
+        () => {
+            const game =
+                getGame();
 
             const menuOpen =
                 !game
                     ?.gameplayStarted ||
-                isStartOverlayVisible();
+                isStartMenuVisible();
 
-
-            state.menuOpen =
-                menuOpen;
-
-
-            document
-                .documentElement
-                .classList
-                .toggle(
-                    "webcs-mobile-menu",
-                    menuOpen
-                );
-
-
-            document
-                .documentElement
-                .classList
-                .toggle(
-                    "webcs-mobile-game",
-                    !menuOpen
-                );
-
+            syncGlobalHUD();
 
             const active =
                 Boolean(
@@ -1521,1021 +1445,64 @@ if (isMobileDevice()) {
                     !menuOpen
                 );
 
+            if (
+                active !==
+                state.enabled
+            ) {
+                state.enabled =
+                    active;
 
-            setGameplayUI(
-                active
-            );
-        };
-
-
-    // ========================================================
-    // Gameplay UI
-    // ========================================================
-
-    const setGameplayUI =
-        active => {
-
-            active =
-                Boolean(
+                root.classList.toggle(
+                    "active",
                     active
                 );
 
-
-            if (
-                state.enabled ===
-                active
-            ) {
-                return;
+                if (!active) {
+                    stopAllTouchActions();
+                }
             }
-
-
-            state.enabled =
-                active;
-
-
-            document
-                .getElementById(
-                    "mobile-controls"
-                )
-                ?.classList
-                .toggle(
-                    "active",
-                    state.enabled
-                );
-
-
-            if (
-                !state.enabled
-            ) {
-
-                state.game
-                    ?.player
-                    ?.setMovementInput?.({
-                        forward:
-                            false,
-
-                        backward:
-                            false,
-
-                        left:
-                            false,
-
-                        right:
-                            false,
-
-                        walk:
-                            false
-                    });
-
-
-                state.moveInput.forward = false;
-                state.moveInput.backward = false;
-                state.moveInput.left = false;
-                state.moveInput.right = false;
-                state.moveInput.walk = false;
-
-
-                state.game
-                    ?.player
-                    ?.stopFire?.();
-            }
-        };
-
-
-    // ========================================================
-    // Mobile Input Bridge V1
-    //
-    // game.js updatePlayerInput() writes keyboard input every frame.
-    // A one-shot joystick write is therefore overwritten immediately.
-    // This bridge keeps the mobile movement state persistent by applying
-    // it after the original desktop keyboard update each frame.
-    // ========================================================
-
-    const installMobileInputBridge =
-        game => {
-
-            if (
-                !game ||
-                state.inputBridgeInstalled
-            ) {
-                return;
-            }
-
-
-            const originalUpdatePlayerInput =
-                typeof game.updatePlayerInput === "function"
-                    ? game.updatePlayerInput.bind(game)
-                    : null;
-
-
-            game.updatePlayerInput =
-                function () {
-
-                    originalUpdatePlayerInput?.();
-
-
-                    if (
-                        !state.enabled ||
-                        !this.player ||
-                        !this.player.isAlive
-                    ) {
-                        return;
-                    }
-
-
-                    this.player.setMovementInput?.({
-                        forward: state.moveInput.forward,
-                        backward: state.moveInput.backward,
-                        left: state.moveInput.left,
-                        right: state.moveInput.right,
-                        walk: state.moveInput.walk
-                    });
-                };
-
-
-            state.inputBridgeInstalled =
-                true;
-
-
-            console.log(
-                "[WEB-CS15] Mobile Input Bridge installed"
-            );
-        };
-
-
-    // ========================================================
-    // Joystick
-    // ========================================================
-
-    const bindJoystick =
-        root => {
-
-            const zone =
-                root.querySelector(
-                    "#mobile-joystick"
-                );
-
-
-            const stick =
-                root.querySelector(
-                    "#mobile-stick"
-                );
-
-
-            const radius =
-                48;
-
-
-            const update =
-                event => {
-
-                    const rect =
-                        zone
-                            .getBoundingClientRect();
-
-
-                    const cx =
-                        rect.left +
-                        rect.width /
-                        2;
-
-
-                    const cy =
-                        rect.top +
-                        rect.height /
-                        2;
-
-
-                    let dx =
-                        event.clientX -
-                        cx;
-
-
-                    let dy =
-                        event.clientY -
-                        cy;
-
-
-                    const len =
-                        Math.hypot(
-                            dx,
-                            dy
-                        );
-
-
-                    if (
-                        len >
-                        radius
-                    ) {
-
-                        dx =
-                            dx /
-                            len *
-                            radius;
-
-
-                        dy =
-                            dy /
-                            len *
-                            radius;
-                    }
-
-
-                    stick.style
-                        .transform =
-                            `translate(${dx}px, ${dy}px)`;
-
-
-                    const nx =
-                        dx /
-                        radius;
-
-
-                    const ny =
-                        dy /
-                        radius;
-
-
-                    const dead =
-                        0.23;
-
-
-                    state.moveInput.forward =
-                        ny < -dead;
-
-                    state.moveInput.backward =
-                        ny > dead;
-
-                    state.moveInput.left =
-                        nx < -dead;
-
-                    state.moveInput.right =
-                        nx > dead;
-
-                    state.moveInput.walk =
-                        false;
-                };
-
-
-            const reset =
-                () => {
-
-                    state.joystickPointer =
-                        null;
-
-
-                    stick.style
-                        .transform =
-                            "translate(0,0)";
-
-
-                    state.moveInput.forward = false;
-                    state.moveInput.backward = false;
-                    state.moveInput.left = false;
-                    state.moveInput.right = false;
-                    state.moveInput.walk = false;
-                };
-
-
-            zone.addEventListener(
-                "pointerdown",
-                event => {
-
-                    if (
-                        !state.enabled ||
-                        state.joystickPointer !==
-                            null
-                    ) {
-                        return;
-                    }
-
-
-                    state.joystickPointer =
-                        event.pointerId;
-
-
-                    zone.setPointerCapture?.(
-                        event.pointerId
-                    );
-
-
-                    update(
-                        event
-                    );
-                }
-            );
-
-
-            zone.addEventListener(
-                "pointermove",
-                event => {
-
-                    if (
-                        event.pointerId !==
-                        state.joystickPointer
-                    ) {
-                        return;
-                    }
-
-
-                    update(
-                        event
-                    );
-                }
-            );
-
-
-            zone.addEventListener(
-                "pointerup",
-                event => {
-
-                    if (
-                        event.pointerId ===
-                        state.joystickPointer
-                    ) {
-
-                        reset();
-                    }
-                }
-            );
-
-
-            zone.addEventListener(
-                "pointercancel",
-                event => {
-
-                    if (
-                        event.pointerId ===
-                        state.joystickPointer
-                    ) {
-
-                        reset();
-                    }
-                }
-            );
-        };
-
-
-    // ========================================================
-    // Look
-    // ========================================================
-
-    const bindLook =
-        root => {
-
-            const zone =
-                root.querySelector(
-                    "#mobile-look-zone"
-                );
-
-
-            const sensitivity =
-                0.0032;
-
-
-            const maxPitch =
-                Math.PI /
-                2 -
-                0.08;
-
-
-            zone.addEventListener(
-                "pointerdown",
-                event => {
-
-                    if (
-                        !state.enabled ||
-                        state.lookPointer !==
-                            null
-                    ) {
-                        return;
-                    }
-
-
-                    state.lookPointer =
-                        event.pointerId;
-
-
-                    state.lookX =
-                        event.clientX;
-
-
-                    state.lookY =
-                        event.clientY;
-
-
-                    zone.setPointerCapture?.(
-                        event.pointerId
-                    );
-                }
-            );
-
-
-            zone.addEventListener(
-                "pointermove",
-                event => {
-
-                    if (
-                        !state.enabled ||
-                        event.pointerId !==
-                            state.lookPointer
-                    ) {
-                        return;
-                    }
-
-
-                    const dx =
-                        event.clientX -
-                        state.lookX;
-
-
-                    const dy =
-                        event.clientY -
-                        state.lookY;
-
-
-                    state.lookX =
-                        event.clientX;
-
-
-                    state.lookY =
-                        event.clientY;
-
-
-                    const camera =
-                        state.game
-                            ?.camera;
-
-
-                    if (!camera) {
-                        return;
-                    }
-
-
-                    camera.rotation
-                        .order =
-                            "YXZ";
-
-
-                    camera.rotation
-                        .y -=
-                            dx *
-                            sensitivity;
-
-
-                    camera.rotation
-                        .x =
-                            clamp(
-                                camera
-                                    .rotation
-                                    .x -
-                                    dy *
-                                    sensitivity,
-
-                                -maxPitch,
-
-                                maxPitch
-                            );
-                }
-            );
-
-
-            const reset =
-                event => {
-
-                    if (
-                        event.pointerId ===
-                        state.lookPointer
-                    ) {
-
-                        state.lookPointer =
-                            null;
-                    }
-                };
-
-
-            zone.addEventListener(
-                "pointerup",
-                reset
-            );
-
-
-            zone.addEventListener(
-                "pointercancel",
-                reset
-            );
-        };
-
-
-    // ========================================================
-    // Action button helper
-    // ========================================================
-
-    const pressBind =
-        (
-            element,
-            onDown,
-            onUp =
-                null
-        ) => {
-
-            if (!element) {
-                return;
-            }
-
-
-            element.addEventListener(
-                "pointerdown",
-                event => {
-
-                    if (
-                        !state.enabled
-                    ) {
-                        return;
-                    }
-
-
-                    event.preventDefault();
-
-                    event.stopPropagation();
-
-
-                    element
-                        .setPointerCapture?.(
-                            event.pointerId
-                        );
-
-
-                    element
-                        .classList
-                        .add(
-                            "active"
-                        );
-
-
-                    onDown?.(
-                        event
-                    );
-                }
-            );
-
-
-            const release =
-                event => {
-
-                    event.preventDefault();
-
-                    event.stopPropagation();
-
-
-                    element
-                        .classList
-                        .remove(
-                            "active"
-                        );
-
-
-                    onUp?.(
-                        event
-                    );
-                };
-
-
-            element.addEventListener(
-                "pointerup",
-                release
-            );
-
-
-            element.addEventListener(
-                "pointercancel",
-                release
-            );
-        };
-
-
-    // ========================================================
-    // Actions
-    // ========================================================
-
-    const bindActions =
-        root => {
-
-            const game =
-                () =>
-                    state.game;
-
-
-            // ------------------------------------------------
-            // FIRE
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-fire"
-                ),
-
-                () => {
-
-                    const player =
-                        game()
-                            ?.player;
-
-
-                    if (
-                        !player
-                            ?.isAlive
-                    ) {
-                        return;
-                    }
-
-
-                    if (
-                        player
-                            .grenadeMode
-                    ) {
-
-                        if (
-                            player
-                                .beginGrenadePrime?.()
-                        ) {
-
-                            game()
-                                ?.weaponView
-                                ?.beginGrenadePrime?.();
-                        }
-
-                    } else {
-
-                        player
-                            .startFire?.();
-                    }
-                },
-
-                () => {
-
-                    const player =
-                        game()
-                            ?.player;
-
-
-                    if (
-                        player
-                            ?.grenadeMode
-                    ) {
-
-                        if (
-                            player
-                                .releaseGrenadePrime?.()
-                        ) {
-
-                            game()
-                                ?.weaponView
-                                ?.releaseGrenadeThrow?.();
-                        }
-
-                    } else {
-
-                        player
-                            ?.stopFire?.();
-                    }
-                }
-            );
-
-
-            // ------------------------------------------------
-            // JUMP
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-jump"
-                ),
-
-                () =>
-                    game()
-                        ?.player
-                        ?.jump?.()
-            );
-
-
-            // ------------------------------------------------
-            // RELOAD
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-reload"
-                ),
-
-                () => {
-
-                    game()
-                        ?.exitSniperScope?.({
-                            restoreWeaponView:
-                                true
-                        });
-
-
-                    game()
-                        ?.player
-                        ?.reload?.();
-                }
-            );
-
-
-            // ------------------------------------------------
-            // CROUCH
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-crouch"
-                ),
-
-                () => {
-
-                    const player =
-                        game()
-                            ?.player;
-
-
-                    if (!player) {
-                        return;
-                    }
-
-
-                    player
-                        .setCrouching?.(
-                            !player
-                                .isCrouching
-                        );
-                }
-            );
-
-
-            // ------------------------------------------------
-            // WEAPON
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-weapon"
-                ),
-
-                () => {
-
-                    const player =
-                        game()
-                            ?.player;
-
-
-                    if (!player) {
-                        return;
-                    }
-
-
-                    game()
-                        ?.exitSniperScope?.({
-                            restoreWeaponView:
-                                true
-                        });
-
-
-                    state.weaponCycle =
-                        (
-                            state.weaponCycle +
-                            1
-                        ) %
-                        3;
-
-
-                    if (
-                        state.weaponCycle ===
-                        0
-                    ) {
-
-                        player
-                            .equipPrimary?.();
-                    }
-
-
-                    if (
-                        state.weaponCycle ===
-                        1
-                    ) {
-
-                        player
-                            .equipSecondary?.();
-                    }
-
-
-                    if (
-                        state.weaponCycle ===
-                        2
-                    ) {
-
-                        player
-                            .equipKnife?.();
-                    }
-                }
-            );
-
-
-            // ------------------------------------------------
-            // GRENADE
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-grenade"
-                ),
-
-                () => {
-
-                    game()
-                        ?.exitSniperScope?.({
-                            restoreWeaponView:
-                                false
-                        });
-
-
-                    if (
-                        !game()
-                            ?.weaponView
-                            ?.isGrenadeBusy?.()
-                    ) {
-
-                        game()
-                            ?.player
-                            ?.cycleGrenadeSlot?.();
-                    }
-                }
-            );
-
-
-            // ------------------------------------------------
-            // SCOPE
-            // ------------------------------------------------
-
-            pressBind(
-                root.querySelector(
-                    "#mobile-scope"
-                ),
-
-                () =>
-                    game()
-                        ?.toggleSniperScope?.()
-            );
-
-
-            // ------------------------------------------------
-            // Fullscreen
-            // ------------------------------------------------
-
-            root
-                .querySelector(
-                    "#mobile-fullscreen"
-                )
-                ?.addEventListener(
-                    "click",
-                    event => {
-
-                        event.preventDefault();
-
-                        event.stopPropagation();
-
-
-                        requestFullscreen();
-                    }
-                );
-        };
-
-
-    // ========================================================
-    // Start / lifecycle
-    // ========================================================
-
-    const bindStart =
-        () => {
-
-            const startButton =
-                document.getElementById(
-                    "start-button"
-                );
-
-
-            startButton
-                ?.addEventListener(
-                    "click",
-                    () => {
-
-                        requestFullscreen();
-
-
-                        window.setTimeout(
-                            syncMobileMode,
-                            120
-                        );
-                    },
-                    {
-                        capture:
-                            true
-                    }
-                );
-
-
-            window.addEventListener(
-                "pagehide",
-                () =>
-                    setGameplayUI(
-                        false
-                    )
-            );
-
-
-            document.addEventListener(
-                "visibilitychange",
-                () => {
-
-                    if (
-                        document.hidden
-                    ) {
-
-                        setGameplayUI(
-                            false
-                        );
-                    }
-                }
-            );
-
-
-            const tick =
-                () => {
-
-                    syncMobileMode();
-
-
-                    requestAnimationFrame(
-                        tick
-                    );
-                };
-
 
             requestAnimationFrame(
-                tick
+                syncMode
             );
         };
 
-
-    // ========================================================
-    // Bootstrap
-    // ========================================================
-
-    injectCSS();
+    requestAnimationFrame(
+        syncMode
+    );
 
 
-    const root =
-        createDOM();
+    window.addEventListener(
+        "pagehide",
+        stopAllTouchActions
+    );
 
-
-    waitForGame()
-        .then(
-            game => {
-
-                state.game =
-                    game;
-
-
-                installMobileInputBridge(
-                    game
-                );
-
-
-                syncMobileMode();
-
-
-                bindJoystick(
-                    root
-                );
-
-
-                bindLook(
-                    root
-                );
-
-
-                bindActions(
-                    root
-                );
-
-
-                bindStart();
-
-
-                console.log(
-                    "[WEB-CS15] Mobile Controls V2.2 ready"
-                );
+    document.addEventListener(
+        "visibilitychange",
+        () => {
+            if (
+                document.hidden
+            ) {
+                stopAllTouchActions();
             }
-        );
+        }
+    );
 }
+
+
+// ============================================================
+// Desktop/mobile global HUD sync
+// ============================================================
+
+const globalHudLoop =
+    () => {
+        syncGlobalHUD();
+
+        requestAnimationFrame(
+            globalHudLoop
+        );
+    };
+
+requestAnimationFrame(
+    globalHudLoop
+);
