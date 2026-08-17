@@ -1,4 +1,263 @@
 // ============================================================
+// WEB-CS15 Mobile Controls V2.1 - Integrated Compatibility
+//
+// Global fixes in this file also work on desktop:
+// - structuredClone fallback for older Android browsers
+// - Hide gameplay HUD while the Main Menu is visible
+//
+// Mobile-only code below keeps the existing V2 touch controls.
+// ============================================================
+
+// ============================================================
+// structuredClone Compatibility
+// ============================================================
+
+if (
+    typeof globalThis.structuredClone !==
+    "function"
+) {
+
+    const cloneFallback =
+        value => {
+
+            if (
+                value === null ||
+                typeof value !==
+                    "object"
+            ) {
+                return value;
+            }
+
+
+            if (
+                Array.isArray(
+                    value
+                )
+            ) {
+
+                return value.map(
+                    cloneFallback
+                );
+            }
+
+
+            if (
+                value instanceof Date
+            ) {
+
+                return new Date(
+                    value.getTime()
+                );
+            }
+
+
+            const copy = {};
+
+
+            for (
+                const [
+                    key,
+                    item
+                ]
+                of Object.entries(
+                    value
+                )
+            ) {
+
+                copy[key] =
+                    cloneFallback(
+                        item
+                    );
+            }
+
+
+            return copy;
+        };
+
+
+    globalThis.structuredClone =
+        cloneFallback;
+}
+
+
+// ============================================================
+// Main Menu HUD Visibility - Desktop + Mobile
+// ============================================================
+
+const installMainMenuHUDFix =
+    () => {
+
+        const style =
+            document.createElement(
+                "style"
+            );
+
+
+        style.id =
+            "webcs-main-menu-hud-fix";
+
+
+        style.textContent = `
+            html.webcs-main-menu-open #hud-hp,
+            html.webcs-main-menu-open #hud-armor,
+            html.webcs-main-menu-open #hud-money,
+
+            html.webcs-main-menu-open #hud-ammo-clip,
+            html.webcs-main-menu-open #hud-ammo-reserve,
+            html.webcs-main-menu-open #hud-weapon-name,
+
+            html.webcs-main-menu-open #round-timer,
+            html.webcs-main-menu-open #round-number,
+
+            html.webcs-main-menu-open #team-a-score,
+            html.webcs-main-menu-open #team-b-score,
+
+            html.webcs-main-menu-open #freeze-hud,
+            html.webcs-main-menu-open #spectate-hud,
+
+            html.webcs-main-menu-open #kill-feed,
+            html.webcs-main-menu-open #tab-scoreboard,
+
+            html.webcs-main-menu-open #radio-message,
+            html.webcs-main-menu-open #radio-history,
+            html.webcs-main-menu-open #radio-menu,
+
+            html.webcs-main-menu-open #hud-status,
+
+            html.webcs-main-menu-open #crosshair,
+            html.webcs-main-menu-open #hitmarker,
+            html.webcs-main-menu-open #damage-indicator,
+
+            html.webcs-main-menu-open #grenade-indicator,
+            html.webcs-main-menu-open #weapon-pickup-hint,
+            html.webcs-main-menu-open #sniper-scope,
+
+            html.webcs-main-menu-open #fps-counter,
+            html.webcs-main-menu-open #nav-debug-toggle,
+
+            html.webcs-main-menu-open .top-hud,
+            html.webcs-main-menu-open .bottom-left-hud,
+            html.webcs-main-menu-open .bottom-right-hud {
+                visibility: hidden !important;
+                pointer-events: none !important;
+            }
+        `;
+
+
+        document.head.appendChild(
+            style
+        );
+
+
+        const sync =
+            () => {
+
+                const overlay =
+                    document.getElementById(
+                        "start-overlay"
+                    );
+
+
+                let menuOpen =
+                    true;
+
+
+                if (
+                    overlay
+                ) {
+
+                    const overlayStyle =
+                        getComputedStyle(
+                            overlay
+                        );
+
+
+                    menuOpen =
+                        overlayStyle.display !==
+                            "none" &&
+                        overlayStyle.visibility !==
+                            "hidden" &&
+                        Number(
+                            overlayStyle.opacity ||
+                            1
+                        ) !==
+                            0;
+                }
+
+
+                document.documentElement
+                    .classList
+                    .toggle(
+                        "webcs-main-menu-open",
+                        menuOpen
+                    );
+            };
+
+
+        const bind =
+            () => {
+
+                const overlay =
+                    document.getElementById(
+                        "start-overlay"
+                    );
+
+
+                sync();
+
+
+                if (
+                    overlay
+                ) {
+
+                    const observer =
+                        new MutationObserver(
+                            sync
+                        );
+
+
+                    observer.observe(
+                        overlay,
+                        {
+                            attributes:
+                                true,
+
+                            attributeFilter: [
+                                "style",
+                                "class",
+                                "hidden"
+                            ]
+                        }
+                    );
+                }
+            };
+
+
+        if (
+            document.readyState ===
+            "loading"
+        ) {
+
+            document.addEventListener(
+                "DOMContentLoaded",
+                bind,
+                {
+                    once:
+                        true
+                }
+            );
+
+        } else {
+
+            bind();
+        }
+    };
+
+
+installMainMenuHUDFix();
+
+
+// ============================================================
 // WEB-CS15 Mobile Controls V2
 //
 // Consolidated mobile support:
