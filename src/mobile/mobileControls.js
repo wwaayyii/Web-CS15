@@ -1,5 +1,3 @@
-import { ui } from "../ui/ui.js";
-
 // ============================================================
 // WEB-CS15 Mobile Controls V3
 //
@@ -309,7 +307,7 @@ if (isMobileDevice()) {
             position: absolute;
             right: max(14px, env(safe-area-inset-right));
             bottom: max(14px, env(safe-area-inset-bottom));
-            width: 385px;
+            width: 315px;
             height: 210px;
             z-index: 50;
             pointer-events: none;
@@ -372,11 +370,6 @@ if (isMobileDevice()) {
         #mobile-crouch {
             right: 188px;
             bottom: 0;
-        }
-
-        #mobile-buy {
-            right: 268px;
-            bottom: 52px;
         }
 
         #mobile-fullscreen {
@@ -502,7 +495,6 @@ if (isMobileDevice()) {
             <button class="mobile-btn" id="mobile-grenade">GRENADE</button>
             <button class="mobile-btn" id="mobile-weapon">WEAPON</button>
             <button class="mobile-btn" id="mobile-crouch">CROUCH</button>
-            <button class="mobile-btn" id="mobile-buy">BUY</button>
         </div>
 
         <button id="mobile-fullscreen">FULL</button>
@@ -601,28 +593,6 @@ if (isMobileDevice()) {
                 ?.player
                 ?.stopFire?.();
         };
-
-
-    // ========================================================
-    // Buy Menu
-    // ========================================================
-
-    bindTouchButton(
-        "mobile-buy",
-
-        () => {
-            const game =
-                getGame();
-
-            if (
-                !game?.player?.isAlive
-            ) {
-                return;
-            }
-
-            ui.toggleBuyMenu?.();
-        }
-    );
 
 
     // ========================================================
@@ -1470,14 +1440,9 @@ if (isMobileDevice()) {
                 Boolean(
                     game
                         ?.gameplayStarted &&
-                    game
-                        ?.player
-                        ?.isAlive &&
                     !game
                         ?.paused &&
-                    !menuOpen &&
-                    !ui
-                        ?.anyMenuOpen
+                    !menuOpen
                 );
 
             if (
@@ -1494,15 +1459,6 @@ if (isMobileDevice()) {
 
                 if (!active) {
                     stopAllTouchActions();
-
-                    if (
-                        !game
-                            ?.player
-                            ?.isAlive
-                    ) {
-                        state.crouching =
-                            false;
-                    }
                 }
             }
 
