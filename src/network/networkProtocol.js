@@ -1,0 +1,14 @@
+export const NET = Object.freeze({
+    WELCOME: "WELCOME",
+    PING: "PING",
+    PONG: "PONG",
+    SET_NAME: "SET_NAME",
+    GET_ROOM_LIST: "GET_ROOM_LIST",
+    ROOM_LIST: "ROOM_LIST",
+    CREATE_ROOM: "CREATE_ROOM",
+    JOIN_ROOM: "JOIN_ROOM",
+    LEAVE_ROOM: "LEAVE_ROOM",
+    LEFT_ROOM: "LEFT_ROOM",
+    LOBBY_STATE: "LOBBY_STATE",
+    ERROR: "ERROR"
+});
