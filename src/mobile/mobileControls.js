@@ -1,5 +1,5 @@
 // ============================================================
-// WEB-CS15 Mobile Controls V2.1 - Integrated Compatibility
+// WEB-CS15 Mobile Controls V2.2 - Touch Input Bridge
 //
 // Global fixes in this file also work on desktop:
 // - structuredClone fallback for older Android browsers
@@ -296,7 +296,17 @@ if (isMobileDevice()) {
 
         weaponCycle: 0,
 
-        menuOpen: true
+        menuOpen: true,
+
+        moveInput: {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            walk: false
+        },
+
+        inputBridgeInstalled: false
     };
 
 
@@ -678,6 +688,9 @@ if (isMobileDevice()) {
 
                     touch-action:
                         none;
+
+                    z-index:
+                        10;
                 }
 
 
@@ -744,6 +757,9 @@ if (isMobileDevice()) {
 
                     touch-action:
                         none;
+
+                    z-index:
+                        30;
                 }
 
 
@@ -833,6 +849,9 @@ if (isMobileDevice()) {
 
                     pointer-events:
                         none;
+
+                    z-index:
+                        30;
                 }
 
 
@@ -897,6 +916,9 @@ if (isMobileDevice()) {
 
                     touch-action:
                         none;
+
+                    z-index:
+                        31;
                 }
 
 
@@ -1021,6 +1043,9 @@ if (isMobileDevice()) {
 
                     opacity:
                         .76;
+
+                    z-index:
+                        40;
                 }
 
 
@@ -1563,10 +1588,78 @@ if (isMobileDevice()) {
                     });
 
 
+                state.moveInput.forward = false;
+                state.moveInput.backward = false;
+                state.moveInput.left = false;
+                state.moveInput.right = false;
+                state.moveInput.walk = false;
+
+
                 state.game
                     ?.player
                     ?.stopFire?.();
             }
+        };
+
+
+    // ========================================================
+    // Mobile Input Bridge V1
+    //
+    // game.js updatePlayerInput() writes keyboard input every frame.
+    // A one-shot joystick write is therefore overwritten immediately.
+    // This bridge keeps the mobile movement state persistent by applying
+    // it after the original desktop keyboard update each frame.
+    // ========================================================
+
+    const installMobileInputBridge =
+        game => {
+
+            if (
+                !game ||
+                state.inputBridgeInstalled
+            ) {
+                return;
+            }
+
+
+            const originalUpdatePlayerInput =
+                typeof game.updatePlayerInput === "function"
+                    ? game.updatePlayerInput.bind(game)
+                    : null;
+
+
+            game.updatePlayerInput =
+                function () {
+
+                    originalUpdatePlayerInput?.();
+
+
+                    if (
+                        !state.enabled ||
+                        !this.player ||
+                        !this.player.isAlive
+                    ) {
+                        return;
+                    }
+
+
+                    this.player.setMovementInput?.({
+                        forward: state.moveInput.forward,
+                        backward: state.moveInput.backward,
+                        left: state.moveInput.left,
+                        right: state.moveInput.right,
+                        walk: state.moveInput.walk
+                    });
+                };
+
+
+            state.inputBridgeInstalled =
+                true;
+
+
+            console.log(
+                "[WEB-CS15] Mobile Input Bridge installed"
+            );
         };
 
 
@@ -1667,28 +1760,20 @@ if (isMobileDevice()) {
                         0.23;
 
 
-                    state.game
-                        ?.player
-                        ?.setMovementInput?.({
-                            forward:
-                                ny <
-                                -dead,
+                    state.moveInput.forward =
+                        ny < -dead;
 
-                            backward:
-                                ny >
-                                dead,
+                    state.moveInput.backward =
+                        ny > dead;
 
-                            left:
-                                nx <
-                                -dead,
+                    state.moveInput.left =
+                        nx < -dead;
 
-                            right:
-                                nx >
-                                dead,
+                    state.moveInput.right =
+                        nx > dead;
 
-                            walk:
-                                false
-                        });
+                    state.moveInput.walk =
+                        false;
                 };
 
 
@@ -1704,24 +1789,11 @@ if (isMobileDevice()) {
                             "translate(0,0)";
 
 
-                    state.game
-                        ?.player
-                        ?.setMovementInput?.({
-                            forward:
-                                false,
-
-                            backward:
-                                false,
-
-                            left:
-                                false,
-
-                            right:
-                                false,
-
-                            walk:
-                                false
-                        });
+                    state.moveInput.forward = false;
+                    state.moveInput.backward = false;
+                    state.moveInput.left = false;
+                    state.moveInput.right = false;
+                    state.moveInput.walk = false;
                 };
 
 
@@ -2435,6 +2507,11 @@ if (isMobileDevice()) {
                     game;
 
 
+                installMobileInputBridge(
+                    game
+                );
+
+
                 syncMobileMode();
 
 
@@ -2457,7 +2534,7 @@ if (isMobileDevice()) {
 
 
                 console.log(
-                    "[WEB-CS15] Mobile Controls V2 ready"
+                    "[WEB-CS15] Mobile Controls V2.2 ready"
                 );
             }
         );
