@@ -1,7 +1,7 @@
 import { ui } from "../ui/ui.js";
 
 // ============================================================
-// WEB-CS15 Mobile Controls V3
+// WEB-CS15 Mobile Controls V3.2
 //
 // Mobile input now reuses the desktop game input path:
 // - Joystick -> game.keys (W/A/S/D)
@@ -604,28 +604,6 @@ if (isMobileDevice()) {
 
 
     // ========================================================
-    // Buy Menu
-    // ========================================================
-
-    bindTouchButton(
-        "mobile-buy",
-
-        () => {
-            const game =
-                getGame();
-
-            if (
-                !game?.player?.isAlive
-            ) {
-                return;
-            }
-
-            ui.toggleBuyMenu?.();
-        }
-    );
-
-
-    // ========================================================
     // Fullscreen
     // ========================================================
 
@@ -1133,6 +1111,28 @@ if (isMobileDevice()) {
 
 
     // ========================================================
+    // Buy Menu
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-buy",
+
+        () => {
+            const game =
+                getGame();
+
+            if (
+                !game?.player?.isAlive
+            ) {
+                return;
+            }
+
+            ui.toggleBuyMenu?.();
+        }
+    );
+
+
+    // ========================================================
     // FIRE
     // ========================================================
 
@@ -1444,7 +1444,7 @@ if (isMobileDevice()) {
                     game;
 
                 console.log(
-                    "[WEB-CS15] Mobile Controls V3 ready"
+                    "[WEB-CS15] Mobile Controls V3.2 ready"
                 );
             }
         );
