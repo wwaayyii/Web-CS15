@@ -42,16 +42,29 @@ jobs:
             });
             core.setOutput('number', number);
             core.setOutput('state', pr.state);
-            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('artifact_sha', context.payload.workflow_run.head_sha);
+            core.setOutput(
+              'stale',
+              pr.state === 'open' &&
+                context.payload.workflow_run.head_sha !== pr.head.sha,
+            );
+
+      - name: Report stale preview
+        if: steps.pr.outputs.stale == 'true'
+        env:
+          ARTIFACT_SHA: ${{ steps.pr.outputs.artifact_sha }}
+        run: |
+          echo "Skipping stale preview artifact ${ARTIFACT_SHA}; a newer PR revision exists."
 
       - name: Check out trusted publisher
+        if: steps.pr.outputs.stale != 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.repository.default_branch }}
           path: publisher
 
       - name: Download untrusted static artifact
-        if: steps.pr.outputs.state == 'open'
+        if: steps.pr.outputs.state == 'open' && steps.pr.outputs.stale != 'true'
         uses: actions/download-artifact@v4
         with:
           name: pr-preview-site
@@ -60,12 +73,13 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Assemble aggregate Pages site
+        if: steps.pr.outputs.stale != 'true'
         working-directory: publisher
         shell: bash
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           PR_STATE: ${{ steps.pr.outputs.state }}
-          PR_SHA: ${{ steps.pr.outputs.head_sha }}
+          PR_SHA: ${{ steps.pr.outputs.artifact_sha }}
         run: |
           set -euo pipefail
           git fetch origin gh-pages
@@ -86,13 +100,16 @@ jobs:
           git -C publish push origin HEAD:gh-pages
 
       - name: Configure GitHub Pages
+        if: steps.pr.outputs.stale != 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload aggregate Pages site
+        if: steps.pr.outputs.stale != 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: publisher/publish
 
       - name: Deploy GitHub Pages
+        if: steps.pr.outputs.stale != 'true'
         id: deployment
         uses: actions/deploy-pages@v4
