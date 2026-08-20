@@ -270,29 +270,42 @@ if (isMobileDevice()) {
            Mobile BUY menu sizing
         ============================================== */
 
-        body.webcs-mobile #buy-menu,
-        body.webcs-mobile .buy-menu,
-        body.webcs-mobile #buy-menu-panel,
-        body.webcs-mobile .buy-menu-panel,
-        body.webcs-mobile .buy-menu-content {
+        body.webcs-mobile #buy-menu {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            right: auto !important;
+            bottom: auto !important;
             box-sizing: border-box !important;
-            max-width: 94vw !important;
-            max-height: 84dvh !important;
+            width: min(720px, 92vw) !important;
+            max-width: 92vw !important;
+            max-height: 88dvh !important;
+            overflow: hidden !important;
+            transform: translate(-50%, -50%) !important;
+            transform-origin: center center !important;
+        }
+
+        body.webcs-mobile #buy-menu-list {
+            box-sizing: border-box !important;
+            max-height: calc(88dvh - 54px) !important;
             overflow-x: hidden !important;
             overflow-y: auto !important;
             -webkit-overflow-scrolling: touch !important;
             touch-action: pan-y !important;
-            transform: scale(.82) !important;
-            transform-origin: center center !important;
         }
 
-        body.webcs-mobile #buy-menu button,
-        body.webcs-mobile .buy-menu button,
-        body.webcs-mobile #buy-menu-panel button,
-        body.webcs-mobile .buy-menu-panel button {
+        body.webcs-mobile #buy-menu button {
             min-height: 36px !important;
             padding: 6px 9px !important;
             font-size: 12px !important;
+        }
+
+        body.webcs-mobile #buy-menu-close {
+            position: relative !important;
+            z-index: 4 !important;
+            flex: 0 0 auto !important;
+            pointer-events: auto !important;
+            touch-action: manipulation !important;
         }
 
         #mobile-controls {
@@ -494,13 +507,6 @@ if (isMobileDevice()) {
                 transform-origin: right bottom;
             }
 
-            body.webcs-mobile #buy-menu,
-            body.webcs-mobile .buy-menu,
-            body.webcs-mobile #buy-menu-panel,
-            body.webcs-mobile .buy-menu-panel,
-            body.webcs-mobile .buy-menu-content {
-                transform: scale(.74) !important;
-            }
         }
     `;
 
@@ -670,28 +676,6 @@ if (isMobileDevice()) {
             state.grenadeFireHeld =
                 false;
         };
-
-
-    // ========================================================
-    // Buy Menu
-    // ========================================================
-
-    bindTouchButton(
-        "mobile-buy",
-
-        () => {
-            const game =
-                getGame();
-
-            if (
-                !game?.player?.isAlive
-            ) {
-                return;
-            }
-
-            ui.toggleBuyMenu?.();
-        }
-    );
 
 
     // ========================================================
