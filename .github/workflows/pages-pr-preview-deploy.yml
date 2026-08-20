@@ -1,0 +1,98 @@
+name: Deploy pull request preview
+
+on:
+  workflow_run:
+    workflows: [Build pull request preview]
+    types: [completed]
+
+# Permissions are deliberately granted only to the trusted deployment job.
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pages: write
+      id-token: write
+      pull-requests: read
+    concurrency:
+      group: webcs15-pages-publish
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}pr-${{ steps.pr.outputs.number }}/
+    steps:
+      # workflow_run always loads this file from the trusted default branch.
+      - name: Resolve trusted PR state
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prs = context.payload.workflow_run.pull_requests;
+            if (prs.length !== 1) {
+              core.setFailed(`Expected one associated PR, found ${prs.length}`);
+              return;
+            }
+            const number = prs[0].number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: number,
+            });
+            core.setOutput('number', number);
+            core.setOutput('state', pr.state);
+            core.setOutput('head_sha', pr.head.sha);
+
+      - name: Check out trusted publisher
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: publisher
+
+      - name: Download untrusted static artifact
+        if: steps.pr.outputs.state == 'open'
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-preview-site
+          path: incoming
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Assemble aggregate Pages site
+        working-directory: publisher
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_STATE: ${{ steps.pr.outputs.state }}
+          PR_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin gh-pages
+          git worktree add publish origin/gh-pages
+          preview_dir="publish/pr-${PR_NUMBER}"
+          rm -rf -- "${preview_dir}"
+
+          if [[ "${PR_STATE}" == "open" ]]; then
+            mkdir -p "${preview_dir}"
+            cp -a -- ../incoming/. "${preview_dir}/"
+          fi
+
+          touch publish/.nojekyll
+          git -C publish config user.name github-actions[bot]
+          git -C publish config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C publish add --all
+          git -C publish commit -m "Update preview PR #${PR_NUMBER} at ${PR_SHA}" || true
+          git -C publish push origin HEAD:gh-pages
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload aggregate Pages site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: publisher/publish
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
