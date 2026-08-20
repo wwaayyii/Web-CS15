@@ -1,7 +1,7 @@
 import { ui } from "../ui/ui.js";
 
 // ============================================================
-// WEB-CS15 Mobile Controls V3.2
+// WEB-CS15 Mobile Controls V3.3
 //
 // Mobile input now reuses the desktop game input path:
 // - Joystick -> game.keys (W/A/S/D)
@@ -180,7 +180,24 @@ if (isMobileDevice()) {
         lookTouchId: null,
 
         crouching: false,
-        weaponIndex: 0
+        weaponIndex: 0,
+
+        joystickForward: 0,
+        joystickRight: 0,
+
+        lookStartX: 0,
+        lookStartY: 0,
+        lookMoved: false,
+
+        lastTapTime: 0,
+        lastTapX: 0,
+        lastTapY: 0,
+
+        lookFireHeld: false,
+        grenadeFireHeld: false,
+
+        spectator: false,
+        lastFrameTime: performance.now()
     };
 
 
@@ -248,6 +265,36 @@ if (isMobileDevice()) {
             padding-bottom: 38px !important;
         }
 
+
+        /* =============================================
+           Mobile BUY menu sizing
+        ============================================== */
+
+        body.webcs-mobile #buy-menu,
+        body.webcs-mobile .buy-menu,
+        body.webcs-mobile #buy-menu-panel,
+        body.webcs-mobile .buy-menu-panel,
+        body.webcs-mobile .buy-menu-content {
+            box-sizing: border-box !important;
+            max-width: 94vw !important;
+            max-height: 84dvh !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-y !important;
+            transform: scale(.82) !important;
+            transform-origin: center center !important;
+        }
+
+        body.webcs-mobile #buy-menu button,
+        body.webcs-mobile .buy-menu button,
+        body.webcs-mobile #buy-menu-panel button,
+        body.webcs-mobile .buy-menu-panel button {
+            min-height: 36px !important;
+            padding: 6px 9px !important;
+            font-size: 12px !important;
+        }
+
         #mobile-controls {
             position: fixed;
             inset: 0;
@@ -309,8 +356,8 @@ if (isMobileDevice()) {
             position: absolute;
             right: max(14px, env(safe-area-inset-right));
             bottom: max(14px, env(safe-area-inset-bottom));
-            width: 385px;
-            height: 210px;
+            width: 300px;
+            height: 205px;
             z-index: 50;
             pointer-events: none;
         }
@@ -345,38 +392,41 @@ if (isMobileDevice()) {
 
         #mobile-scope {
             right: 0;
-            bottom: 148px;
-            width: 82px;
+            bottom: 142px;
         }
 
         #mobile-reload {
-            right: 108px;
-            bottom: 52px;
+            right: 0;
+            bottom: 76px;
         }
 
         #mobile-jump {
-            right: 108px;
-            bottom: 0;
+            right: 0;
+            bottom: 10px;
         }
 
         #mobile-grenade {
-            right: 108px;
-            bottom: 114px;
+            right: 82px;
+            bottom: 142px;
         }
 
         #mobile-weapon {
-            right: 188px;
-            bottom: 52px;
+            right: 82px;
+            bottom: 76px;
         }
 
         #mobile-crouch {
-            right: 188px;
-            bottom: 0;
+            right: 82px;
+            bottom: 10px;
         }
 
         #mobile-buy {
-            right: 268px;
-            bottom: 52px;
+            right: 164px;
+            bottom: 76px;
+        }
+
+        #mobile-controls.spectator #mobile-actions {
+            display: none !important;
         }
 
         #mobile-fullscreen {
@@ -443,6 +493,14 @@ if (isMobileDevice()) {
                 transform: scale(.90);
                 transform-origin: right bottom;
             }
+
+            body.webcs-mobile #buy-menu,
+            body.webcs-mobile .buy-menu,
+            body.webcs-mobile #buy-menu-panel,
+            body.webcs-mobile .buy-menu-panel,
+            body.webcs-mobile .buy-menu-content {
+                transform: scale(.74) !important;
+            }
         }
     `;
 
@@ -495,7 +553,6 @@ if (isMobileDevice()) {
         </div>
 
         <div id="mobile-actions">
-            <button class="mobile-btn" id="mobile-fire">FIRE</button>
             <button class="mobile-btn" id="mobile-scope">SCOPE</button>
             <button class="mobile-btn" id="mobile-reload">RELOAD</button>
             <button class="mobile-btn" id="mobile-jump">JUMP</button>
@@ -597,10 +654,44 @@ if (isMobileDevice()) {
         () => {
             clearMovementKeys();
 
+            state.joystickForward =
+                0;
+
+            state.joystickRight =
+                0;
+
             getGame()
                 ?.player
                 ?.stopFire?.();
+
+            state.lookFireHeld =
+                false;
+
+            state.grenadeFireHeld =
+                false;
         };
+
+
+    // ========================================================
+    // Buy Menu
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-buy",
+
+        () => {
+            const game =
+                getGame();
+
+            if (
+                !game?.player?.isAlive
+            ) {
+                return;
+            }
+
+            ui.toggleBuyMenu?.();
+        }
+    );
 
 
     // ========================================================
@@ -633,6 +724,27 @@ if (isMobileDevice()) {
                     );
             } catch (_) {
             }
+        };
+
+
+    const isAnyUIMenuOpen =
+        () => {
+            if (
+                typeof ui?.anyMenuOpen ===
+                "function"
+            ) {
+                try {
+                    return Boolean(
+                        ui.anyMenuOpen()
+                    );
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            return Boolean(
+                ui?.anyMenuOpen
+            );
         };
 
 
@@ -715,19 +827,42 @@ if (isMobileDevice()) {
             const deadZone =
                 0.24;
 
-            setMovementKeys({
-                forward:
-                    y < -deadZone,
+            state.joystickForward =
+                y < -deadZone
+                    ? 1
+                    : y > deadZone
+                        ? -1
+                        : 0;
 
-                backward:
-                    y > deadZone,
+            state.joystickRight =
+                x > deadZone
+                    ? 1
+                    : x < -deadZone
+                        ? -1
+                        : 0;
 
-                left:
-                    x < -deadZone,
+            const game =
+                getGame();
 
-                right:
-                    x > deadZone
-            });
+            if (
+                game?.player?.isAlive
+            ) {
+                setMovementKeys({
+                    forward:
+                        state.joystickForward > 0,
+
+                    backward:
+                        state.joystickForward < 0,
+
+                    left:
+                        state.joystickRight < 0,
+
+                    right:
+                        state.joystickRight > 0
+                });
+            } else {
+                clearMovementKeys();
+            }
         };
 
 
@@ -735,6 +870,12 @@ if (isMobileDevice()) {
         () => {
             state.joystickTouchId =
                 null;
+
+            state.joystickForward =
+                0;
+
+            state.joystickRight =
+                0;
 
             stick.style.transform =
                 "translate(0, 0)";
@@ -750,7 +891,7 @@ if (isMobileDevice()) {
             event.stopPropagation();
 
             if (
-                !state.enabled ||
+                !state.controlsVisible ||
                 state.joystickTouchId !==
                     null
             ) {
@@ -842,7 +983,13 @@ if (isMobileDevice()) {
 
 
     // ========================================================
-    // Touch Look
+    // Touch Look + Double Tap Fire
+    //
+    // Drag = look
+    // First tap = arm double tap
+    // Second quick tap + hold = fire
+    // While holding second tap, drag still aims
+    // Release = stop fire
     // ========================================================
 
     const lookZone =
@@ -857,6 +1004,85 @@ if (isMobileDevice()) {
         0;
 
 
+    const beginLookFire =
+        () => {
+            const game =
+                getGame();
+
+            const player =
+                game?.player;
+
+            if (
+                !player?.isAlive
+            ) {
+                return false;
+            }
+
+            if (
+                player.grenadeMode
+            ) {
+                if (
+                    player
+                        .beginGrenadePrime?.()
+                ) {
+                    game
+                        ?.weaponView
+                        ?.beginGrenadePrime?.();
+
+                    state.grenadeFireHeld =
+                        true;
+
+                    state.lookFireHeld =
+                        true;
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            player.startFire?.();
+
+            state.lookFireHeld =
+                true;
+
+            return true;
+        };
+
+
+    const endLookFire =
+        () => {
+            const game =
+                getGame();
+
+            const player =
+                game?.player;
+
+            if (
+                state.grenadeFireHeld &&
+                player?.grenadeMode
+            ) {
+                if (
+                    player
+                        .releaseGrenadePrime?.()
+                ) {
+                    game
+                        ?.weaponView
+                        ?.releaseGrenadeThrow?.();
+                }
+            } else {
+                player
+                    ?.stopFire?.();
+            }
+
+            state.lookFireHeld =
+                false;
+
+            state.grenadeFireHeld =
+                false;
+        };
+
+
     lookZone.addEventListener(
         "touchstart",
         event => {
@@ -864,7 +1090,7 @@ if (isMobileDevice()) {
             event.stopPropagation();
 
             if (
-                !state.enabled ||
+                !state.controlsVisible ||
                 state.lookTouchId !==
                     null
             ) {
@@ -881,11 +1107,51 @@ if (isMobileDevice()) {
             state.lookTouchId =
                 touch.identifier;
 
+            state.lookStartX =
+                touch.clientX;
+
+            state.lookStartY =
+                touch.clientY;
+
             lastLookX =
                 touch.clientX;
 
             lastLookY =
                 touch.clientY;
+
+            state.lookMoved =
+                false;
+
+            const now =
+                performance.now();
+
+            const timeSinceTap =
+                now -
+                state.lastTapTime;
+
+            const tapDistance =
+                Math.hypot(
+                    touch.clientX -
+                        state.lastTapX,
+
+                    touch.clientY -
+                        state.lastTapY
+                );
+
+            const isDoubleTap =
+                !state.spectator &&
+                timeSinceTap > 0 &&
+                timeSinceTap <= 330 &&
+                tapDistance <= 72;
+
+            if (
+                isDoubleTap
+            ) {
+                beginLookFire();
+
+                state.lastTapTime =
+                    0;
+            }
         },
         {
             passive:
@@ -927,6 +1193,22 @@ if (isMobileDevice()) {
             const dy =
                 touch.clientY -
                 lastLookY;
+
+            const totalMovement =
+                Math.hypot(
+                    touch.clientX -
+                        state.lookStartX,
+
+                    touch.clientY -
+                        state.lookStartY
+                );
+
+            if (
+                totalMovement > 6
+            ) {
+                state.lookMoved =
+                    true;
+            }
 
             lastLookX =
                 touch.clientX;
@@ -979,10 +1261,34 @@ if (isMobileDevice()) {
                     state.lookTouchId
                 );
 
-            if (touch) {
-                state.lookTouchId =
-                    null;
+            if (!touch) {
+                return;
             }
+
+            if (
+                state.lookFireHeld
+            ) {
+                endLookFire();
+
+            } else if (
+                !state.lookMoved &&
+                !state.spectator
+            ) {
+                state.lastTapTime =
+                    performance.now();
+
+                state.lastTapX =
+                    touch.clientX;
+
+                state.lastTapY =
+                    touch.clientY;
+            }
+
+            state.lookTouchId =
+                null;
+
+            state.lookMoved =
+                false;
         };
 
 
@@ -995,9 +1301,25 @@ if (isMobileDevice()) {
         }
     );
 
+
     lookZone.addEventListener(
         "touchcancel",
-        endLook,
+        event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (
+                state.lookFireHeld
+            ) {
+                endLookFire();
+            }
+
+            state.lookTouchId =
+                null;
+
+            state.lookMoved =
+                false;
+        },
         {
             passive:
                 false
@@ -1062,7 +1384,10 @@ if (isMobileDevice()) {
                     event.preventDefault();
                     event.stopPropagation();
 
-                    if (!state.enabled) {
+                    if (
+                        !state.controlsVisible ||
+                        state.spectator
+                    ) {
                         return;
                     }
 
@@ -1108,89 +1433,6 @@ if (isMobileDevice()) {
                 }
             );
         };
-
-
-    // ========================================================
-    // Buy Menu
-    // ========================================================
-
-    bindTouchButton(
-        "mobile-buy",
-
-        () => {
-            const game =
-                getGame();
-
-            if (
-                !game?.player?.isAlive
-            ) {
-                return;
-            }
-
-            ui.toggleBuyMenu?.();
-        }
-    );
-
-
-    // ========================================================
-    // FIRE
-    // ========================================================
-
-    bindTouchButton(
-        "mobile-fire",
-
-        () => {
-            const game =
-                getGame();
-
-            const player =
-                game?.player;
-
-            if (
-                !player?.isAlive
-            ) {
-                return;
-            }
-
-            if (
-                player.grenadeMode
-            ) {
-                if (
-                    player
-                        .beginGrenadePrime?.()
-                ) {
-                    game
-                        ?.weaponView
-                        ?.beginGrenadePrime?.();
-                }
-            } else {
-                player.startFire?.();
-            }
-        },
-
-        () => {
-            const game =
-                getGame();
-
-            const player =
-                game?.player;
-
-            if (
-                player?.grenadeMode
-            ) {
-                if (
-                    player
-                        .releaseGrenadePrime?.()
-                ) {
-                    game
-                        ?.weaponView
-                        ?.releaseGrenadeThrow?.();
-                }
-            } else {
-                player?.stopFire?.();
-            }
-        }
-    );
 
 
     // ========================================================
@@ -1355,6 +1597,32 @@ if (isMobileDevice()) {
 
 
     // ========================================================
+    // Buy
+    // ========================================================
+
+    bindTouchButton(
+        "mobile-buy",
+
+        () => {
+            const game =
+                getGame();
+
+            if (
+                !game
+                    ?.player
+                    ?.isAlive
+            ) {
+                return;
+            }
+
+            ui
+                ?.toggleBuyMenu
+                ?.();
+        }
+    );
+
+
+    // ========================================================
     // Fullscreen
     // ========================================================
 
@@ -1444,20 +1712,85 @@ if (isMobileDevice()) {
                     game;
 
                 console.log(
-                    "[WEB-CS15] Mobile Controls V3.2 ready"
+                    "[WEB-CS15] Mobile Controls V3.3 ready"
                 );
             }
         );
 
 
     // ========================================================
-    // Continuous mode synchronization
+    // Continuous mode synchronization + mobile spectator move
     // ========================================================
 
-    const syncMode =
-        () => {
+    const updateSpectatorMovement =
+        delta => {
             const game =
                 getGame();
+
+            if (
+                !state.spectator ||
+                !state.controlsVisible ||
+                !game ||
+                game.player?.isAlive
+            ) {
+                return;
+            }
+
+            const controls =
+                game.controls;
+
+            if (!controls) {
+                return;
+            }
+
+            const speed =
+                Number(
+                    game.spectatorSpeed
+                ) ||
+                12;
+
+            if (
+                typeof controls.moveForward ===
+                "function"
+            ) {
+                controls.moveForward(
+                    state.joystickForward *
+                    speed *
+                    delta
+                );
+            }
+
+            if (
+                typeof controls.moveRight ===
+                "function"
+            ) {
+                controls.moveRight(
+                    state.joystickRight *
+                    speed *
+                    delta
+                );
+            }
+        };
+
+
+    const syncMode =
+        now => {
+            const game =
+                getGame();
+
+            const delta =
+                Math.min(
+                    (
+                        now -
+                        state.lastFrameTime
+                    ) /
+                    1000,
+
+                    0.05
+                );
+
+            state.lastFrameTime =
+                now;
 
             const menuOpen =
                 !game
@@ -1466,45 +1799,65 @@ if (isMobileDevice()) {
 
             syncGlobalHUD();
 
-            const active =
+            const uiMenuOpen =
+                isAnyUIMenuOpen();
+
+            const controlsVisible =
+                Boolean(
+                    game
+                        ?.gameplayStarted &&
+                    !game
+                        ?.paused &&
+                    !menuOpen &&
+                    !uiMenuOpen
+                );
+
+            const spectator =
                 Boolean(
                     game
                         ?.gameplayStarted &&
                     game
-                        ?.player
-                        ?.isAlive &&
+                        ?.player &&
                     !game
-                        ?.paused &&
-                    !menuOpen &&
-                    !ui
-                        ?.anyMenuOpen
+                        ?.player
+                        ?.isAlive
                 );
+
+            state.controlsVisible =
+                controlsVisible;
+
+            state.spectator =
+                spectator;
+
+            root.classList.toggle(
+                "active",
+                controlsVisible
+            );
+
+            root.classList.toggle(
+                "spectator",
+                spectator
+            );
 
             if (
-                active !==
-                state.enabled
+                !controlsVisible
             ) {
-                state.enabled =
-                    active;
-
-                root.classList.toggle(
-                    "active",
-                    active
-                );
-
-                if (!active) {
-                    stopAllTouchActions();
-
-                    if (
-                        !game
-                            ?.player
-                            ?.isAlive
-                    ) {
-                        state.crouching =
-                            false;
-                    }
-                }
+                clearMovementKeys();
+                state.joystickForward = 0;
+                state.joystickRight = 0;
             }
+
+            if (
+                spectator
+            ) {
+                getGame()
+                    ?.player
+                    ?.stopFire?.();
+            }
+
+            updateSpectatorMovement(
+                delta
+            );
 
             requestAnimationFrame(
                 syncMode
