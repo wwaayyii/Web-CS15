@@ -1,0 +1,33 @@
+name: Build pull request preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+
+# This untrusted half of the pipeline can only read repository contents.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-preview-package-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the exact PR revision
+        if: github.event.action != 'closed'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Upload static site
+        if: github.event.action != 'closed'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-site
+          path: .
+          include-hidden-files: false
+          retention-days: 1

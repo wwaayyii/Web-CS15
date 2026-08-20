@@ -1,0 +1,66 @@
+name: Deploy production Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    concurrency:
+      group: webcs15-pages-publish
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out production source
+        uses: actions/checkout@v4
+
+      - name: Assemble production and retained previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin gh-pages || true
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add publish origin/gh-pages
+          else
+            git worktree add --detach publish
+            git -C publish checkout --orphan gh-pages
+            git -C publish rm -rf .
+          fi
+
+          find publish -mindepth 1 -maxdepth 1 \
+            ! -name .git ! -name 'pr-*' -exec rm -rf -- {} +
+          git archive HEAD | tar -x -C publish
+          touch publish/.nojekyll
+
+      # gh-pages is persistence for the aggregate artifact. It is not a
+      # branch-based Pages source; actions/deploy-pages is the sole publisher.
+      - name: Save aggregate state
+        working-directory: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add --all
+          git commit -m "Deploy production ${GITHUB_SHA}" || true
+          git push origin HEAD:gh-pages
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
