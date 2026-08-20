@@ -1867,7 +1867,8 @@ export class Game {
         const supported =
             new Set([
                 "fy_iceworld_web",
-                "aim_arena_web"
+                "aim_arena_web",
+                "de_sandstorm"
             ]);
 
 
@@ -1943,7 +1944,9 @@ export class Game {
             mapName !==
                 "fy_iceworld_web" &&
             mapName !==
-                "aim_arena_web"
+                "aim_arena_web" &&
+            mapName !==
+                "de_sandstorm"
         ) {
 
             return false;
@@ -2018,10 +2021,11 @@ export class Game {
         ) {
 
             label.textContent =
-                mapName ===
-                    "aim_arena_web"
+                mapName === "aim_arena_web"
                     ? "AIM ARENA"
-                    : "ICEWORLD";
+                    : mapName === "de_sandstorm"
+                        ? "DE SANDSTORM"
+                        : "ICEWORLD";
         }
     }
 

@@ -53,6 +53,11 @@ import {
     buildAimArena
 } from "./maps/aim_arena.js?v=20260808_3";
 
+import {
+    MAP_ID as DE_SANDSTORM_ID,
+    buildDeSandstorm
+} from "./maps/de_sandstorm.js?v=20260820_1";
+
 
 
 
@@ -107,6 +112,11 @@ const MAP_BUILDERS =
         [
             AIM_ARENA_ID,
             buildAimArena
+        ],
+
+        [
+            DE_SANDSTORM_ID,
+            buildDeSandstorm
         ]
     ]);
 
