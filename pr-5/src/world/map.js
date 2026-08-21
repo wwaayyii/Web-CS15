@@ -169,6 +169,14 @@ export class GameMap {
 
         this.aiCollisionObjects = [];
 
+        /*
+         * Vertical Terrain V1:
+         * surfaces that may support player/BOT feet. Keeping this separate
+         * from horizontal blockers lets rotated ramps use raycast contacts
+         * without their world AABB becoming an invisible wall.
+         */
+        this.walkableSurfaces = [];
+
 
         // ====================================================
         // Navigation / A*
@@ -730,6 +738,8 @@ export class GameMap {
             weaponTarget = true,
             grenadeCollision = true,
             aiCollision = true,
+            walkableSurface =
+                type === MAP_OBJECT_TYPE.FLOOR,
 
             /*
              * 未显式指定时，根据 map object type 自动推断。
@@ -871,6 +881,18 @@ export class GameMap {
         if (aiCollision) {
 
             this.aiCollisionObjects.push(
+                object
+            );
+        }
+
+
+        if (walkableSurface) {
+
+            object.userData.walkableSurface =
+                true;
+
+
+            this.walkableSurfaces.push(
                 object
             );
         }
@@ -2438,7 +2460,11 @@ export class GameMap {
 
     resolvePositionCollision(
         position,
-        radius = 0.45
+        radius = 0.45,
+        {
+            feetY = null,
+            height = null
+        } = {}
     ) {
 
         const result =
@@ -2527,6 +2553,24 @@ export class GameMap {
                     object,
                     box
                 );
+            }
+
+
+            /*
+             * Old callers omit vertical bounds and retain the original flat
+             * XZ behaviour. Entity callers provide a feet/body interval so a
+             * bridge or tunnel ceiling on another level does not block them.
+             */
+            if (
+                Number.isFinite(feetY) &&
+                Number.isFinite(height) &&
+                (
+                    feetY + height <= box.min.y + 0.01 ||
+                    feetY >= box.max.y - 0.01
+                )
+            ) {
+
+                continue;
             }
 
 
@@ -2633,6 +2677,100 @@ export class GameMap {
 
 
         return result;
+    }
+
+
+    // ========================================================
+    // Vertical Terrain V1 - Ground Contact
+    // ========================================================
+
+    getGroundContact(
+        position,
+        {
+            maxStepUp = 0.6,
+            maxDrop = 1.25,
+            maxSlopeDegrees = 48
+        } = {}
+    ) {
+
+        if (
+            !position ||
+            this.walkableSurfaces.length === 0
+        ) {
+
+            return null;
+        }
+
+
+        const origin =
+            new THREE.Vector3(
+                position.x,
+                position.y + maxStepUp + 0.05,
+                position.z
+            );
+
+
+        const raycaster =
+            new THREE.Raycaster(
+                origin,
+                new THREE.Vector3(0, -1, 0),
+                0,
+                maxStepUp + maxDrop + 0.1
+            );
+
+
+        const hits =
+            raycaster.intersectObjects(
+                this.walkableSurfaces,
+                true
+            );
+
+
+        const minimumNormalY =
+            Math.cos(
+                THREE.MathUtils.degToRad(
+                    maxSlopeDegrees
+                )
+            );
+
+
+        for (const hit of hits) {
+
+            const normal =
+                hit.face?.normal
+                    ?.clone() ||
+                new THREE.Vector3(0, 1, 0);
+
+
+            normal.transformDirection(
+                hit.object.matrixWorld
+            );
+
+
+            if (normal.y < minimumNormalY) {
+                continue;
+            }
+
+
+            return {
+                point: hit.point.clone(),
+                normal,
+                object: hit.object,
+                slopeDegrees:
+                    THREE.MathUtils.radToDeg(
+                        Math.acos(
+                            THREE.MathUtils.clamp(
+                                normal.y,
+                                -1,
+                                1
+                            )
+                        )
+                    )
+            };
+        }
+
+
+        return null;
     }
 
 
@@ -2940,6 +3078,9 @@ export class GameMap {
             0;
 
         this.aiCollisionObjects.length =
+            0;
+
+        this.walkableSurfaces.length =
             0;
 
 
