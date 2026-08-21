@@ -121,6 +121,15 @@ function addRamp(gameMap, name, start, end, width = 7) {
         walkableSurface: true
     });
 
+    gameMap.registerRampZone({
+        name,
+        start,
+        end,
+        width,
+        baseY: terrainBaseY,
+        surfaceObject: ramp
+    });
+
     return ramp;
 }
 

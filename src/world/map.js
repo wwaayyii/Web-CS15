@@ -56,7 +56,7 @@ import {
 import {
     MAP_ID as DE_SANDSTORM_ID,
     buildDeSandstorm
-} from "./maps/de_sandstorm.js?v=20260821_6";
+} from "./maps/de_sandstorm.js?v=20260821_7";
 
 
 
@@ -176,6 +176,16 @@ export class GameMap {
          * without their world AABB becoming an invisible wall.
          */
         this.walkableSurfaces = [];
+
+        this.rampZones = [];
+
+        this.rampGroundContactResult = {
+            point: new THREE.Vector3(),
+            normal: new THREE.Vector3(0, 1, 0),
+            object: null,
+            rampZone: null,
+            groundY: 0
+        };
 
         /* Flat maps opt out of every per-frame ground raycast. */
         this.hasVerticalTerrain = false;
@@ -2522,6 +2532,21 @@ export class GameMap {
             position.clone();
 
 
+        if (
+            this.hasVerticalTerrain &&
+            Number.isFinite(feetY) &&
+            Number.isFinite(height)
+        ) {
+
+            this.resolveRampZoneUndersideCollision(
+                result,
+                feetY,
+                height,
+                radius
+            );
+        }
+
+
         // ----------------------------------------------------
         // World Bounds
         // ----------------------------------------------------
@@ -2778,6 +2803,203 @@ export class GameMap {
             maxSlopeDegrees,
             profileSource
         );
+    }
+
+
+    registerRampZone({
+        name,
+        start,
+        end,
+        width,
+        baseY = -4,
+        surfaceObject = null
+    }) {
+
+        if (
+            !name ||
+            !start ||
+            !end ||
+            !Number.isFinite(width)
+        ) {
+
+            return null;
+        }
+
+
+        const dx = end.x - start.x;
+        const dz = end.z - start.z;
+        const length = Math.hypot(dx, dz);
+
+
+        if (length <= 0.001) {
+            return null;
+        }
+
+
+        const rise = end.y - start.y;
+        const slopeLength = Math.hypot(length, rise);
+        const zone = {
+            name,
+            start: start.clone(),
+            end: end.clone(),
+            width,
+            baseY,
+            halfWidth: width * 0.5,
+            length,
+            rise,
+            dirX: dx / length,
+            dirZ: dz / length,
+            sideX: dz / length,
+            sideZ: -dx / length,
+            normal: new THREE.Vector3(
+                -rise / slopeLength * dx / length,
+                length / slopeLength,
+                -rise / slopeLength * dz / length
+            ),
+            surfaceObject
+        };
+
+
+        this.rampZones.push(zone);
+        return zone;
+    }
+
+
+    getRampGroundContact(
+        position,
+        options = null
+    ) {
+
+        if (
+            !this.hasVerticalTerrain ||
+            !position
+        ) {
+
+            return null;
+        }
+
+
+        const alongMargin =
+            options?.alongMargin ?? 0.15;
+        const sideMargin =
+            options?.sideMargin ?? 0.15;
+        const maxVerticalDistance =
+            options?.maxVerticalDistance ?? 0.7;
+
+
+        for (const zone of this.rampZones) {
+            const relativeX = position.x - zone.start.x;
+            const relativeZ = position.z - zone.start.z;
+            const along = relativeX * zone.dirX + relativeZ * zone.dirZ;
+
+
+            if (
+                along < -alongMargin ||
+                along > zone.length + alongMargin
+            ) {
+                continue;
+            }
+
+
+            const sideDistance =
+                relativeX * zone.sideX +
+                relativeZ * zone.sideZ;
+
+
+            if (
+                Math.abs(sideDistance) >
+                zone.halfWidth + sideMargin
+            ) {
+                continue;
+            }
+
+
+            const t = THREE.MathUtils.clamp(
+                along / zone.length,
+                0,
+                1
+            );
+            const groundY = zone.start.y + zone.rise * t;
+
+
+            if (
+                Math.abs(position.y - groundY) >
+                maxVerticalDistance
+            ) {
+                continue;
+            }
+
+
+            const result = this.rampGroundContactResult;
+            result.point.set(position.x, groundY, position.z);
+            result.normal.copy(zone.normal);
+            result.object = zone.surfaceObject;
+            result.rampZone = zone;
+            result.groundY = groundY;
+            return result;
+        }
+
+
+        return null;
+    }
+
+
+    resolveRampZoneUndersideCollision(
+        position,
+        feetY,
+        height,
+        radius
+    ) {
+
+        for (const zone of this.rampZones) {
+            const relativeX = position.x - zone.start.x;
+            const relativeZ = position.z - zone.start.z;
+            const along = relativeX * zone.dirX + relativeZ * zone.dirZ;
+
+
+            if (
+                along < 0 ||
+                along > zone.length + radius
+            ) {
+                continue;
+            }
+
+
+            const sideDistance =
+                relativeX * zone.sideX +
+                relativeZ * zone.sideZ;
+            const sideLimit = zone.halfWidth + radius;
+
+
+            if (Math.abs(sideDistance) >= sideLimit) {
+                continue;
+            }
+
+
+            const t = THREE.MathUtils.clamp(
+                along / zone.length,
+                0,
+                1
+            );
+            const groundY = zone.start.y + zone.rise * t;
+
+
+            if (
+                feetY >= groundY - 0.7 ||
+                feetY + height <= zone.baseY
+            ) {
+                continue;
+            }
+
+
+            const sideSign = sideDistance < 0 ? -1 : 1;
+            const push = sideLimit - Math.abs(sideDistance) + 0.01;
+            position.x += zone.sideX * sideSign * push;
+            position.z += zone.sideZ * sideSign * push;
+        }
+
+
+        return position;
     }
 
 
@@ -3411,6 +3633,8 @@ export class GameMap {
 
         this.walkableSurfaces.length =
             0;
+
+        this.rampZones.length = 0;
 
         this.hasVerticalTerrain = false;
 
