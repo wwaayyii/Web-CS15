@@ -56,7 +56,7 @@ import {
 import {
     MAP_ID as DE_SANDSTORM_ID,
     buildDeSandstorm
-} from "./maps/de_sandstorm.js?v=20260821_3";
+} from "./maps/de_sandstorm.js?v=20260821_5";
 
 
 
