@@ -2036,6 +2036,12 @@ export class BotAI {
                     );
 
 
+            const verticalDistance =
+                Math.abs(
+                    toWaypoint.y
+                );
+
+
             toWaypoint.y = 0;
 
 
@@ -2045,7 +2051,8 @@ export class BotAI {
 
             let reached =
                 distance <=
-                this.navigationWaypointReachDistance;
+                    this.navigationWaypointReachDistance &&
+                verticalDistance <= 1.1;
 
 
             // ------------------------------------------------
@@ -2057,7 +2064,8 @@ export class BotAI {
             // ------------------------------------------------
 
             if (
-                !reached
+                !reached &&
+                verticalDistance <= 1.1
             ) {
 
                 const previousPoint =
@@ -2181,6 +2189,17 @@ export class BotAI {
                     this.navigationPath[
                         index
                     ];
+
+
+                if (
+                    Math.abs(
+                        candidate.y -
+                        position.y
+                    ) > 1.25
+                ) {
+
+                    continue;
+                }
 
 
                 if (

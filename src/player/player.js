@@ -272,6 +272,10 @@ export class Player {
             PLAYER_CONFIG.eyeHeight;
 
 
+        // World-space height under the player's feet.
+        this.groundHeight = 0;
+
+
         this.footstepTimer =
             0;
 
@@ -1054,10 +1058,16 @@ export class Player {
         // ====================================================
 
         const groundY =
-            this.eyeHeight;
+            Number.isFinite(
+                this.groundHeight
+            )
+                ? this.groundHeight +
+                    this.eyeHeight
+                : null;
 
 
         if (
+            groundY !== null &&
             object.position.y <=
             groundY
         ) {
@@ -1262,11 +1272,51 @@ export class Player {
          * 的 Y 就是视点高度。
          */
         if (
-            this.isGrounded
+            this.isGrounded &&
+            Number.isFinite(
+                this.groundHeight
+            )
         ) {
 
             object.position.y =
+                this.groundHeight +
                 this.eyeHeight;
+        }
+    }
+
+
+    setGroundHeight(
+        height,
+        {
+            snap = false
+        } = {}
+    ) {
+
+        this.groundHeight =
+            Number.isFinite(height)
+                ? height
+                : null;
+
+
+        if (
+            snap &&
+            this.groundHeight !== null
+        ) {
+
+            const object =
+                this.getControlObject();
+
+
+            if (object) {
+
+                object.position.y =
+                    this.groundHeight +
+                    this.eyeHeight;
+            }
+
+
+            this.velocity.y = 0;
+            this.isGrounded = true;
         }
     }
 
@@ -2741,25 +2791,37 @@ export class Player {
                 this.setPosition(
                     position.x,
 
-                    PLAYER_CONFIG
-                        .eyeHeight,
+                    position.y +
+                        PLAYER_CONFIG
+                            .eyeHeight,
 
                     position.z
                 );
 
+
+                this.groundHeight =
+                    position.y;
+
             } else {
+
+                const requestedY =
+                    position.y ??
+                    PLAYER_CONFIG.eyeHeight;
 
                 this.setPosition(
                     position.x ??
                         0,
 
-                    position.y ??
-                        PLAYER_CONFIG
-                            .eyeHeight,
+                    requestedY,
 
                     position.z ??
                         0
                 );
+
+
+                this.groundHeight =
+                    requestedY -
+                    PLAYER_CONFIG.eyeHeight;
             }
         }
 

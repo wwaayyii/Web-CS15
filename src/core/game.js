@@ -4458,7 +4458,15 @@ export class Game {
         const corrected =
             map.resolvePositionCollision(
                 original,
-                PLAYER_CONFIG.radius
+                PLAYER_CONFIG.radius,
+                {
+                    feetY:
+                        original.y -
+                        this.player.eyeHeight,
+
+                    height:
+                        this.player.eyeHeight
+                }
             );
 
 
@@ -4469,6 +4477,60 @@ export class Game {
         this.player.setPosition(
             corrected
         );
+
+
+        const feetPosition =
+            new THREE.Vector3(
+                corrected.x,
+                corrected.y -
+                    this.player.eyeHeight,
+                corrected.z
+            );
+
+
+        const ground =
+            map.getGroundContact(
+                feetPosition,
+                {
+                    maxStepUp:
+                        this.player.isGrounded
+                            ? 0.6
+                            : 0.65,
+
+                    maxDrop:
+                        this.player.isGrounded
+                            ? 0.85
+                            : 0.3
+                }
+            );
+
+
+        if (
+            ground &&
+            (
+                this.player.isGrounded ||
+                (
+                    this.player.velocity.y <= 0 &&
+                    feetPosition.y <=
+                        ground.point.y + 0.12
+                )
+            )
+        ) {
+
+            this.player.setGroundHeight(
+                ground.point.y,
+                {
+                    snap: true
+                }
+            );
+
+        } else if (
+            this.player.isGrounded
+        ) {
+
+            this.player.setGroundHeight(null);
+            this.player.isGrounded = false;
+        }
     }
 
 
@@ -4497,7 +4559,11 @@ export class Game {
             const corrected =
                 map.resolvePositionCollision(
                     original,
-                    bot.radius
+                    bot.radius,
+                    {
+                        feetY: original.y,
+                        height: 1.8
+                    }
                 );
 
 
@@ -4508,6 +4574,28 @@ export class Game {
             bot.setPosition(
                 corrected
             );
+
+
+            const ground =
+                map.getGroundContact(
+                    corrected,
+                    {
+                        maxStepUp: 0.65,
+                        maxDrop: 0.85
+                    }
+                );
+
+
+            if (ground) {
+
+                corrected.y =
+                    ground.point.y;
+
+
+                bot.setPosition(
+                    corrected
+                );
+            }
         }
     }
 
