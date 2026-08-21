@@ -177,6 +177,42 @@ export class GameMap {
          */
         this.walkableSurfaces = [];
 
+        /* Flat maps opt out of every per-frame ground raycast. */
+        this.hasVerticalTerrain = false;
+
+        this.groundRaycaster =
+            new THREE.Raycaster();
+
+        this.groundRayOrigin =
+            new THREE.Vector3();
+
+        this.groundRayDirection =
+            new THREE.Vector3(0, -1, 0);
+
+        this.groundNormal =
+            new THREE.Vector3();
+
+        this.groundContactResult = {
+            point: new THREE.Vector3(),
+            normal: new THREE.Vector3(0, 1, 0),
+            object: null,
+            slopeDegrees: 0
+        };
+
+        this.groundIntersections = [];
+
+        this.groundSlopeNormalCache =
+            new Map();
+
+        this.groundQueryProfile = {
+            total: 0,
+            snapshotTotal: 0,
+            snapshotTime: performance.now(),
+            enabled: false,
+            sources: new Map(),
+            snapshotSources: new Map()
+        };
+
 
         // ====================================================
         // Navigation / A*
@@ -2689,11 +2725,13 @@ export class GameMap {
         {
             maxStepUp = 0.6,
             maxDrop = 1.25,
-            maxSlopeDegrees = 48
+            maxSlopeDegrees = 48,
+            profileSource = null
         } = {}
     ) {
 
         if (
+            !this.hasVerticalTerrain ||
             !position ||
             this.walkableSurfaces.length === 0
         ) {
@@ -2702,44 +2740,93 @@ export class GameMap {
         }
 
 
-        const origin =
-            new THREE.Vector3(
-                position.x,
-                position.y + maxStepUp + 0.05,
-                position.z
-            );
+        this.groundQueryProfile.total++;
 
 
-        const raycaster =
-            new THREE.Raycaster(
-                origin,
-                new THREE.Vector3(0, -1, 0),
-                0,
-                maxStepUp + maxDrop + 0.1
+        if (
+            this.groundQueryProfile.enabled &&
+            profileSource
+        ) {
+
+            this.groundQueryProfile.sources.set(
+                profileSource,
+                (
+                    this.groundQueryProfile.sources.get(
+                        profileSource
+                    ) || 0
+                ) + 1
             );
+        }
+
+
+        this.groundRayOrigin.set(
+            position.x,
+            position.y + maxStepUp + 0.05,
+            position.z
+        );
+
+
+        this.groundRaycaster.set(
+            this.groundRayOrigin,
+            this.groundRayDirection
+        );
+
+
+        this.groundRaycaster.near = 0;
+        this.groundRaycaster.far =
+            maxStepUp + maxDrop + 0.1;
+
+
+        this.groundIntersections.length = 0;
 
 
         const hits =
-            raycaster.intersectObjects(
+            this.groundRaycaster.intersectObjects(
                 this.walkableSurfaces,
-                true
+                false,
+                this.groundIntersections
             );
 
 
-        const minimumNormalY =
-            Math.cos(
-                THREE.MathUtils.degToRad(
-                    maxSlopeDegrees
-                )
+        let minimumNormalY =
+            this.groundSlopeNormalCache.get(
+                maxSlopeDegrees
             );
+
+
+        if (minimumNormalY === undefined) {
+
+            minimumNormalY =
+                Math.cos(
+                    THREE.MathUtils.degToRad(
+                        maxSlopeDegrees
+                    )
+                );
+
+
+            this.groundSlopeNormalCache.set(
+                maxSlopeDegrees,
+                minimumNormalY
+            );
+        }
 
 
         for (const hit of hits) {
 
             const normal =
-                hit.face?.normal
-                    ?.clone() ||
-                new THREE.Vector3(0, 1, 0);
+                this.groundNormal;
+
+
+            if (hit.face?.normal) {
+
+                normal.copy(
+                    hit.face.normal
+                );
+
+            } else {
+
+                normal.set(0, 1, 0);
+            }
 
 
             normal.transformDirection(
@@ -2752,25 +2839,134 @@ export class GameMap {
             }
 
 
-            return {
-                point: hit.point.clone(),
-                normal,
-                object: hit.object,
-                slopeDegrees:
-                    THREE.MathUtils.radToDeg(
-                        Math.acos(
-                            THREE.MathUtils.clamp(
-                                normal.y,
-                                -1,
-                                1
-                            )
+            const result =
+                this.groundContactResult;
+
+
+            result.point.copy(
+                hit.point
+            );
+
+            result.normal.copy(
+                normal
+            );
+
+            result.object =
+                hit.object;
+
+            result.slopeDegrees =
+                THREE.MathUtils.radToDeg(
+                    Math.acos(
+                        THREE.MathUtils.clamp(
+                            normal.y,
+                            -1,
+                            1
                         )
                     )
-            };
+                );
+
+
+            return result;
         }
 
 
         return null;
+    }
+
+
+    getGroundQueryProfile() {
+
+        const now =
+            performance.now();
+
+
+        const elapsedSeconds =
+            Math.max(
+                0.001,
+                (now - this.groundQueryProfile.snapshotTime) /
+                    1000
+            );
+
+
+        const queryDelta =
+            this.groundQueryProfile.total -
+            this.groundQueryProfile.snapshotTotal;
+
+
+        const sources = {};
+
+
+        for (
+            const [source, count]
+            of this.groundQueryProfile.sources
+        ) {
+
+            const previous =
+                this.groundQueryProfile.snapshotSources.get(
+                    source
+                ) || 0;
+
+
+            sources[source] =
+                (count - previous) /
+                elapsedSeconds;
+
+
+            this.groundQueryProfile.snapshotSources.set(
+                source,
+                count
+            );
+        }
+
+
+        const snapshot = {
+            hasVerticalTerrain:
+                this.hasVerticalTerrain,
+
+            enabled:
+                this.groundQueryProfile.enabled,
+
+            total:
+                this.groundQueryProfile.total,
+
+            queriesPerSecond:
+                queryDelta /
+                elapsedSeconds,
+
+            queriesPerSecondBySource:
+                sources,
+
+            elapsedSeconds
+        };
+
+
+        this.groundQueryProfile.snapshotTotal =
+            this.groundQueryProfile.total;
+
+        this.groundQueryProfile.snapshotTime =
+            now;
+
+
+        return snapshot;
+    }
+
+
+    setGroundQueryProfiling(
+        enabled
+    ) {
+
+        this.groundQueryProfile.enabled =
+            Boolean(enabled);
+
+        this.groundQueryProfile.total = 0;
+        this.groundQueryProfile.snapshotTotal = 0;
+        this.groundQueryProfile.sources.clear();
+        this.groundQueryProfile.snapshotSources.clear();
+        this.groundQueryProfile.snapshotTime =
+            performance.now();
+
+
+        return this.groundQueryProfile.enabled;
     }
 
 
@@ -3082,6 +3278,17 @@ export class GameMap {
 
         this.walkableSurfaces.length =
             0;
+
+        this.hasVerticalTerrain = false;
+
+        this.groundSlopeNormalCache.clear();
+
+        this.groundQueryProfile.total = 0;
+        this.groundQueryProfile.snapshotTotal = 0;
+        this.groundQueryProfile.sources.clear();
+        this.groundQueryProfile.snapshotSources.clear();
+        this.groundQueryProfile.snapshotTime =
+            performance.now();
 
 
         this.navigationRejectedWaypoints =
