@@ -192,6 +192,9 @@ export class GameMap {
         this.groundNormal =
             new THREE.Vector3();
 
+        this.groundSurfaceLocalPoint =
+            new THREE.Vector3();
+
         this.groundContactResult = {
             point: new THREE.Vector3(),
             normal: new THREE.Vector3(0, 1, 0),
@@ -934,6 +937,10 @@ export class GameMap {
 
             object.userData.walkableSurface =
                 true;
+
+
+            object.geometry
+                ?.computeBoundingBox?.();
 
 
             this.walkableSurfaces.push(
@@ -2879,6 +2886,45 @@ export class GameMap {
 
 
         return null;
+    }
+
+
+    isPositionOverWalkableSurface(
+        position,
+        object,
+        margin = 0.08
+    ) {
+
+        const box =
+            object?.geometry?.boundingBox;
+
+
+        if (
+            !position ||
+            !object ||
+            !box
+        ) {
+
+            return false;
+        }
+
+
+        this.groundSurfaceLocalPoint.copy(
+            position
+        );
+
+
+        object.worldToLocal(
+            this.groundSurfaceLocalPoint
+        );
+
+
+        return (
+            this.groundSurfaceLocalPoint.x >= box.min.x - margin &&
+            this.groundSurfaceLocalPoint.x <= box.max.x + margin &&
+            this.groundSurfaceLocalPoint.z >= box.min.z - margin &&
+            this.groundSurfaceLocalPoint.z <= box.max.z + margin
+        );
     }
 
 

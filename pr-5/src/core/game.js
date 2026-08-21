@@ -4602,6 +4602,14 @@ export class Game {
             if (
                 !bot.isAlive
             ) {
+
+                if (map.hasVerticalTerrain) {
+
+                    this.botGroundSampleStates.delete(
+                        bot
+                    );
+                }
+
                 continue;
             }
 
@@ -4610,60 +4618,98 @@ export class Game {
                 bot.getPosition();
 
 
-            let state = null;
+            if (!map.hasVerticalTerrain) {
 
-
-            if (map.hasVerticalTerrain) {
-
-                state =
-                    this.botGroundSampleStates.get(
-                        bot
-                    );
-
-
-                if (!state) {
-
-                    state = {
-                        timer: 0,
-                        x: NaN,
-                        z: NaN,
-                        groundY: original.y,
-                        mapName: map.currentMap,
-                        collisionOptions: {
-                            feetY: original.y,
-                            height: 1.8
-                        },
-                        groundOptions: {
-                            maxStepUp: 0.65,
-                            maxDrop: 0.85,
-                            profileSource: `bot:${bot.id}`
-                        }
-                    };
-
-
-                    this.botGroundSampleStates.set(
-                        bot,
-                        state
-                    );
-                }
-
-
-                state.collisionOptions.feetY =
-                    original.y;
-            }
-
-
-            const corrected =
-                map.hasVerticalTerrain
-                    ? map.resolvePositionCollision(
-                        original,
-                        bot.radius,
-                        state.collisionOptions
-                    )
-                    : map.resolvePositionCollision(
+                const corrected =
+                    map.resolvePositionCollision(
                         original,
                         bot.radius
                     );
+
+
+                corrected.y = original.y;
+                bot.setPosition(corrected);
+                continue;
+            }
+
+
+            let state =
+                this.botGroundSampleStates.get(
+                    bot
+                );
+
+
+            if (!state) {
+
+                state = {
+                    timer: 0,
+                    x: NaN,
+                    z: NaN,
+                    grounded: true,
+                    verticalVelocity: 0,
+                    groundY: original.y,
+                    groundObject: null,
+                    fallSampleY: original.y,
+                    mapName: map.currentMap,
+                    collisionOptions: {
+                        feetY: original.y,
+                        height: 1.8
+                    },
+                    groundOptions: {
+                        maxStepUp: 0.65,
+                        maxDrop: 0.85,
+                        profileSource: `bot:${bot.id}`
+                    },
+                    fallingOptions: {
+                        maxStepUp: 0.65,
+                        maxDrop: 0.35,
+                        profileSource: `bot:${bot.id}:falling`
+                    }
+                };
+
+
+                this.botGroundSampleStates.set(
+                    bot,
+                    state
+                );
+            }
+
+
+            const mapChanged =
+                state.mapName !== map.currentMap;
+
+            const respawnedAtDifferentHeight =
+                state.grounded &&
+                Math.abs(original.y - state.groundY) > 0.75;
+
+
+            if (
+                mapChanged ||
+                respawnedAtDifferentHeight
+            ) {
+
+                state.timer = 0;
+                state.x = NaN;
+                state.z = NaN;
+                state.grounded = true;
+                state.verticalVelocity = 0;
+                state.groundY = original.y;
+                state.groundObject = null;
+                state.fallSampleY = original.y;
+                state.mapName = map.currentMap;
+            }
+
+
+            state.collisionOptions.feetY =
+                original.y;
+
+
+            const corrected =
+                map.resolvePositionCollision(
+                    original,
+                    bot.radius,
+                    state.collisionOptions
+                );
 
 
             corrected.y =
@@ -4675,21 +4721,6 @@ export class Game {
             );
 
 
-            if (!map.hasVerticalTerrain) {
-                continue;
-            }
-
-
-            if (state.mapName !== map.currentMap) {
-
-                state.timer = 0;
-                state.x = NaN;
-                state.z = NaN;
-                state.groundY = corrected.y;
-                state.mapName = map.currentMap;
-            }
-
-
             state.timer -= delta;
 
 
@@ -4699,35 +4730,112 @@ export class Game {
                 Math.abs(corrected.z - state.z) > 0.025;
 
 
-            if (
-                !moved ||
-                state.timer > 0
-            ) {
+            if (state.grounded) {
 
-                corrected.y = state.groundY;
-                bot.setPosition(corrected);
-                continue;
+                const leftCachedSurface =
+                    state.groundObject &&
+                    !map.isPositionOverWalkableSurface(
+                        corrected,
+                        state.groundObject,
+                        0.06
+                    );
+
+
+                const shouldSample =
+                    !state.groundObject ||
+                    leftCachedSurface ||
+                    (
+                        moved &&
+                        state.timer <= 0
+                    );
+
+
+                if (!shouldSample) {
+
+                    corrected.y = state.groundY;
+                    bot.setPosition(corrected);
+                    continue;
+                }
+
+
+                const ground =
+                    map.getGroundContact(
+                        corrected,
+                        state.groundOptions
+                    );
+
+
+                state.x = corrected.x;
+                state.z = corrected.z;
+                state.timer = 0.05;
+
+
+                if (ground) {
+
+                    state.groundY = ground.point.y;
+                    state.groundObject = ground.object;
+                    corrected.y = state.groundY;
+                    bot.setPosition(corrected);
+                    continue;
+                }
+
+
+                state.grounded = false;
+                state.verticalVelocity = 0;
+                state.groundObject = null;
+                state.fallSampleY = corrected.y;
+                state.timer = 0;
             }
 
 
-            const ground =
-                map.getGroundContact(
-                    corrected,
-                    state.groundOptions
-                );
+            // Falling remains physics-driven; navigation only controls X/Z.
+            state.verticalVelocity -=
+                PLAYER_CONFIG.gravity * delta;
+
+            corrected.y +=
+                state.verticalVelocity * delta;
 
 
-            if (ground) {
+            if (state.timer <= 0) {
 
-                state.groundY =
-                    ground.point.y;
+                state.fallingOptions.maxStepUp =
+                    Math.max(
+                        0.65,
+                        state.fallSampleY - corrected.y + 0.1
+                    );
+
+
+                const ground =
+                    map.getGroundContact(
+                        corrected,
+                        state.fallingOptions
+                    );
+
+
+                if (
+                    ground &&
+                    ground.point.y <= state.fallSampleY + 0.05 &&
+                    ground.point.y >= corrected.y - 0.1
+                ) {
+
+                    state.grounded = true;
+                    state.verticalVelocity = 0;
+                    state.groundY = ground.point.y;
+                    state.groundObject = ground.object;
+                    state.fallSampleY = ground.point.y;
+                    corrected.y = ground.point.y;
+                    state.timer = 0.05;
+
+                } else {
+
+                    state.fallSampleY = corrected.y;
+                    state.timer = 1 / 30;
+                }
             }
 
 
             state.x = corrected.x;
             state.z = corrected.z;
-            state.timer = 0.05;
-            corrected.y = state.groundY;
             bot.setPosition(corrected);
         }
     }
