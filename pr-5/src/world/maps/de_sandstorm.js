@@ -76,19 +76,29 @@ function addRamp(gameMap, name, start, end, width = 7) {
     const dz = end.z - start.z;
     const rise = end.y - start.y;
     const run = Math.hypot(dx, dz);
+    const slopeLength = Math.hypot(run, rise);
     const thickness = 0.4;
     const pitch = -Math.atan2(rise, run);
     const yaw = Math.atan2(dx, dz);
 
+    /*
+     * Offset the solid box beneath its walking plane. The local +Y normal
+     * tilts with the ramp, so subtracting it keeps the top-face center on the
+     * exact midpoint between start/end rather than shifting the seam sideways.
+     */
+    const rotation = new THREE.Euler(pitch, yaw, 0, "YXZ");
+    const surfaceNormal = new THREE.Vector3(0, 1, 0)
+        .applyEuler(rotation);
+    const center = new THREE.Vector3()
+        .addVectors(start, end)
+        .multiplyScalar(0.5)
+        .addScaledVector(surfaceNormal, -thickness * 0.5);
+
     return addWalkableBox(gameMap, {
         name,
-        position: new THREE.Vector3(
-            (start.x + end.x) * 0.5,
-            (start.y + end.y) * 0.5 - Math.cos(pitch) * thickness * 0.5,
-            (start.z + end.z) * 0.5
-        ),
-        size: new THREE.Vector3(width, thickness, run),
-        rotation: new THREE.Euler(pitch, yaw, 0, "YXZ")
+        position: center,
+        size: new THREE.Vector3(width, thickness, slopeLength),
+        rotation
     });
 }
 
