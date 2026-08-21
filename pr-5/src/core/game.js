@@ -4661,8 +4661,8 @@ export class Game {
                         profileSource: `bot:${bot.id}`
                     },
                     fallingOptions: {
-                        maxStepUp: 0.65,
-                        maxDrop: 0.35,
+                        safetyMargin: 0.08,
+                        maxSlopeDegrees: 48,
                         profileSource: `bot:${bot.id}:falling`
                     }
                 };
@@ -4789,48 +4789,42 @@ export class Game {
 
 
             // Falling remains physics-driven; navigation only controls X/Z.
+            const previousFeetY =
+                corrected.y;
+
+
             state.verticalVelocity -=
                 PLAYER_CONFIG.gravity * delta;
 
-            corrected.y +=
+            const predictedFeetY =
+                previousFeetY +
                 state.verticalVelocity * delta;
 
 
-            if (state.timer <= 0) {
-
-                state.fallingOptions.maxStepUp =
-                    Math.max(
-                        0.65,
-                        state.fallSampleY - corrected.y + 0.1
-                    );
-
-
-                const ground =
-                    map.getGroundContact(
-                        corrected,
-                        state.fallingOptions
-                    );
+            const ground =
+                map.getGroundContactAlongVerticalSegment(
+                    corrected,
+                    previousFeetY,
+                    predictedFeetY,
+                    state.fallingOptions
+                );
 
 
-                if (
-                    ground &&
-                    ground.point.y <= state.fallSampleY + 0.05 &&
-                    ground.point.y >= corrected.y - 0.1
-                ) {
+            if (ground) {
 
-                    state.grounded = true;
-                    state.verticalVelocity = 0;
-                    state.groundY = ground.point.y;
-                    state.groundObject = ground.object;
-                    state.fallSampleY = ground.point.y;
-                    corrected.y = ground.point.y;
-                    state.timer = 0.05;
+                state.grounded = true;
+                state.verticalVelocity = 0;
+                state.groundY = ground.point.y;
+                state.groundObject = ground.object;
+                state.fallSampleY = ground.point.y;
+                corrected.y = ground.point.y;
+                state.timer = 0.05;
 
-                } else {
+            } else {
 
-                    state.fallSampleY = corrected.y;
-                    state.timer = 1 / 30;
-                }
+                corrected.y = predictedFeetY;
+                state.fallSampleY = predictedFeetY;
+                state.timer = 0;
             }
 
 

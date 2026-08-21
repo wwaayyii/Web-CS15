@@ -2755,6 +2755,101 @@ export class GameMap {
         }
 
 
+        this.groundRayOrigin.set(
+            position.x,
+            position.y + maxStepUp + 0.05,
+            position.z
+        );
+
+
+        this.groundRaycaster.set(
+            this.groundRayOrigin,
+            this.groundRayDirection
+        );
+
+
+        this.groundRaycaster.near = 0;
+        this.groundRaycaster.far =
+            maxStepUp + maxDrop + 0.1;
+
+
+        return this._intersectWalkableGround(
+            maxSlopeDegrees,
+            profileSource
+        );
+    }
+
+
+    getGroundContactAlongVerticalSegment(
+        position,
+        previousFeetY,
+        predictedFeetY,
+        {
+            safetyMargin = 0.08,
+            maxSlopeDegrees = 48,
+            profileSource = null
+        } = {}
+    ) {
+
+        if (
+            !this.hasVerticalTerrain ||
+            !position ||
+            !Number.isFinite(previousFeetY) ||
+            !Number.isFinite(predictedFeetY) ||
+            predictedFeetY > previousFeetY ||
+            this.walkableSurfaces.length === 0
+        ) {
+
+            return null;
+        }
+
+
+        this.groundRayOrigin.set(
+            position.x,
+            previousFeetY + safetyMargin,
+            position.z
+        );
+
+
+        this.groundRaycaster.set(
+            this.groundRayOrigin,
+            this.groundRayDirection
+        );
+
+
+        this.groundRaycaster.near = 0;
+        this.groundRaycaster.far =
+            previousFeetY -
+            predictedFeetY +
+            safetyMargin * 2;
+
+
+        const ground =
+            this._intersectWalkableGround(
+                maxSlopeDegrees,
+                profileSource
+            );
+
+
+        if (
+            !ground ||
+            predictedFeetY > ground.point.y + safetyMargin ||
+            previousFeetY < ground.point.y - safetyMargin
+        ) {
+
+            return null;
+        }
+
+
+        return ground;
+    }
+
+
+    _intersectWalkableGround(
+        maxSlopeDegrees,
+        profileSource
+    ) {
+
         this.groundQueryProfile.total++;
 
 
@@ -2772,24 +2867,6 @@ export class GameMap {
                 ) + 1
             );
         }
-
-
-        this.groundRayOrigin.set(
-            position.x,
-            position.y + maxStepUp + 0.05,
-            position.z
-        );
-
-
-        this.groundRaycaster.set(
-            this.groundRayOrigin,
-            this.groundRayDirection
-        );
-
-
-        this.groundRaycaster.near = 0;
-        this.groundRaycaster.far =
-            maxStepUp + maxDrop + 0.1;
 
 
         this.groundIntersections.length = 0;
@@ -2849,7 +2926,8 @@ export class GameMap {
             );
 
 
-            if (normal.y < minimumNormalY) {
+            /* Reject platform undersides, walls, and box side faces. */
+            if (normal.y <= minimumNormalY) {
                 continue;
             }
 
