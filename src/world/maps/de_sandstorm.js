@@ -42,7 +42,7 @@ function createTheme(gameMap) {
     gameMap.materials.wall.roughness = 0.9;
 }
 
-function addWalkableBox(gameMap, { position, size, rotation = null, name }) {
+function addWalkableBox(gameMap, { position, size, rotation = null, name, solidTerrain = false }) {
     const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size.x, size.y, size.z),
         gameMap.materials.floor
@@ -53,6 +53,7 @@ function addWalkableBox(gameMap, { position, size, rotation = null, name }) {
         mesh.rotation.copy(rotation);
     }
     mesh.name = name;
+    mesh.userData.solidTerrain = solidTerrain;
     gameMap.addMapObject(mesh, "floor", {
         collision: true,
         weaponTarget: true,
@@ -64,101 +65,61 @@ function addWalkableBox(gameMap, { position, size, rotation = null, name }) {
 }
 
 function addFloor(gameMap, name, x, groundY, z, width, depth) {
-    const floor = addWalkableBox(gameMap, {
-        name,
-        position: new THREE.Vector3(x, groundY - 0.2, z),
-        size: new THREE.Vector3(width, 0.4, depth)
-    });
-
-    // Every tactical floor is a solid mesa rising from the safety terrain.
     const terrainBaseY = -4;
-    if (groundY > terrainBaseY) {
-        const fill = gameMap.createCover({
-            position: new THREE.Vector3(
-                x,
-                (terrainBaseY + groundY) * 0.5,
-                z
-            ),
-            size: new THREE.Vector3(
-                width,
-                groundY - terrainBaseY,
-                depth
-            )
-        });
-        fill.name = `${name}_SOLID_BASE`;
-    }
+    const height = Math.max(0.4, groundY - terrainBaseY);
 
-    return floor;
+    return addWalkableBox(gameMap, {
+        name,
+        position: new THREE.Vector3(x, groundY - height * 0.5, z),
+        size: new THREE.Vector3(width, height, depth),
+        solidTerrain: true
+    });
 }
 
 function addRamp(gameMap, name, start, end, width = 7) {
     const dx = end.x - start.x;
     const dz = end.z - start.z;
-    const rise = end.y - start.y;
     const run = Math.hypot(dx, dz);
-    const slopeLength = Math.hypot(run, rise);
-    const thickness = 0.4;
-    const pitch = -Math.atan2(rise, run);
-    const yaw = Math.atan2(dx, dz);
-
-    /*
-     * Offset the solid box beneath its walking plane. The local +Y normal
-     * tilts with the ramp, so subtracting it keeps the top-face center on the
-     * exact midpoint between start/end rather than shifting the seam sideways.
-     */
-    const rotation = new THREE.Euler(pitch, yaw, 0, "YXZ");
-    const surfaceNormal = new THREE.Vector3(0, 1, 0)
-        .applyEuler(rotation);
-    const center = new THREE.Vector3()
-        .addVectors(start, end)
-        .multiplyScalar(0.5)
-        .addScaledVector(surfaceNormal, -thickness * 0.5);
-
-    const ramp = addWalkableBox(gameMap, {
-        name,
-        position: center,
-        size: new THREE.Vector3(width, thickness, slopeLength),
-        rotation
-    });
-
-    /*
-     * The engine deliberately does not support two traversable layers in the
-     * same X/Z area. Fill beneath the walking plane with short solid columns,
-     * turning every ramp into terrain instead of an enterable thin slab.
-     */
     const terrainBaseY = -4;
-    const fillSegments = 6;
-    const segmentRun = run / fillSegments;
+    const sideX = dz / run * width * 0.5;
+    const sideZ = -dx / run * width * 0.5;
 
-    for (let index = 0; index < fillSegments; index += 1) {
-        const startT = index / fillSegments;
-        const endT = (index + 1) / fillSegments;
-        const centerT = (startT + endT) * 0.5;
-        const segmentTopY = Math.min(
-            start.y + rise * startT,
-            start.y + rise * endT
-        ) - 0.03;
+    // One closed wedge: bottom, continuous walkable top, both ends and sides.
+    const vertices = [
+        start.x + sideX, terrainBaseY, start.z + sideZ,
+        start.x - sideX, terrainBaseY, start.z - sideZ,
+        end.x - sideX, terrainBaseY, end.z - sideZ,
+        end.x + sideX, terrainBaseY, end.z + sideZ,
+        start.x + sideX, start.y, start.z + sideZ,
+        start.x - sideX, start.y, start.z - sideZ,
+        end.x - sideX, end.y, end.z - sideZ,
+        end.x + sideX, end.y, end.z + sideZ
+    ];
+    const indices = [
+        0, 2, 1, 0, 3, 2,
+        4, 5, 6, 4, 6, 7,
+        0, 1, 5, 0, 5, 4,
+        3, 7, 6, 3, 6, 2,
+        0, 4, 7, 0, 7, 3,
+        1, 2, 6, 1, 6, 5
+    ];
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(vertices, 3)
+    );
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
 
-        if (segmentTopY <= terrainBaseY) {
-            continue;
-        }
-
-        const fill = gameMap.createCover({
-            position: new THREE.Vector3(
-                start.x + dx * centerT,
-                (terrainBaseY + segmentTopY) * 0.5,
-                start.z + dz * centerT
-            ),
-            size: new THREE.Vector3(
-                width,
-                segmentTopY - terrainBaseY,
-                segmentRun + 0.08
-            )
-        });
-        fill.rotation.y = yaw;
-        fill.name = `${name}_SOLID_FILL_${index + 1}`;
-        gameMap.refreshCollisionBox(fill);
-    }
+    const ramp = new THREE.Mesh(geometry, gameMap.materials.floor);
+    ramp.name = name;
+    gameMap.addMapObject(ramp, "floor", {
+        collision: true,
+        weaponTarget: true,
+        grenadeCollision: true,
+        aiCollision: false,
+        walkableSurface: true
+    });
 
     return ramp;
 }
@@ -168,8 +129,8 @@ function createGeometry(gameMap) {
     addFloor(gameMap, "SANDSTORM_LOW_SAFETY_FLOOR", 0, -4, 0, 120, 120);
 
     // Main combat levels.
-    addFloor(gameMap, "T_SPAWN_FLOOR", 0, 0, 51.5, 112, 13);
-    addFloor(gameMap, "T_MID_ENTRY_PAD", 0, 0, 44, 15, 2);
+    addFloor(gameMap, "T_SPAWN_FLOOR", 0, 0, 52, 112, 12);
+    addFloor(gameMap, "T_MID_ENTRY_PAD", 0, 0, 44.5, 15, 3);
     addFloor(gameMap, "T_TUNNEL_ENTRY_PAD", 21, 0, 45, 8, 2);
     addFloor(gameMap, "LONG_APPROACH_FLOOR", -44, 0, 34, 12, 24);
     addFloor(gameMap, "MID_BASIN_FLOOR", 0, -2, 3, 15, 70);

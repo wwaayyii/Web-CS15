@@ -56,7 +56,7 @@ import {
 import {
     MAP_ID as DE_SANDSTORM_ID,
     buildDeSandstorm
-} from "./maps/de_sandstorm.js?v=20260821_5";
+} from "./maps/de_sandstorm.js?v=20260821_6";
 
 
 
@@ -2566,7 +2566,8 @@ export class GameMap {
              */
             if (
                 object.userData.mapType ===
-                MAP_OBJECT_TYPE.FLOOR
+                    MAP_OBJECT_TYPE.FLOOR &&
+                !object.userData.solidTerrain
             ) {
                 continue;
             }
