@@ -64,11 +64,31 @@ function addWalkableBox(gameMap, { position, size, rotation = null, name }) {
 }
 
 function addFloor(gameMap, name, x, groundY, z, width, depth) {
-    return addWalkableBox(gameMap, {
+    const floor = addWalkableBox(gameMap, {
         name,
         position: new THREE.Vector3(x, groundY - 0.2, z),
         size: new THREE.Vector3(width, 0.4, depth)
     });
+
+    // Every tactical floor is a solid mesa rising from the safety terrain.
+    const terrainBaseY = -4;
+    if (groundY > terrainBaseY) {
+        const fill = gameMap.createCover({
+            position: new THREE.Vector3(
+                x,
+                (terrainBaseY + groundY) * 0.5,
+                z
+            ),
+            size: new THREE.Vector3(
+                width,
+                groundY - terrainBaseY,
+                depth
+            )
+        });
+        fill.name = `${name}_SOLID_BASE`;
+    }
+
+    return floor;
 }
 
 function addRamp(gameMap, name, start, end, width = 7) {
@@ -94,12 +114,53 @@ function addRamp(gameMap, name, start, end, width = 7) {
         .multiplyScalar(0.5)
         .addScaledVector(surfaceNormal, -thickness * 0.5);
 
-    return addWalkableBox(gameMap, {
+    const ramp = addWalkableBox(gameMap, {
         name,
         position: center,
         size: new THREE.Vector3(width, thickness, slopeLength),
         rotation
     });
+
+    /*
+     * The engine deliberately does not support two traversable layers in the
+     * same X/Z area. Fill beneath the walking plane with short solid columns,
+     * turning every ramp into terrain instead of an enterable thin slab.
+     */
+    const terrainBaseY = -4;
+    const fillSegments = 6;
+    const segmentRun = run / fillSegments;
+
+    for (let index = 0; index < fillSegments; index += 1) {
+        const startT = index / fillSegments;
+        const endT = (index + 1) / fillSegments;
+        const centerT = (startT + endT) * 0.5;
+        const segmentTopY = Math.min(
+            start.y + rise * startT,
+            start.y + rise * endT
+        ) - 0.03;
+
+        if (segmentTopY <= terrainBaseY) {
+            continue;
+        }
+
+        const fill = gameMap.createCover({
+            position: new THREE.Vector3(
+                start.x + dx * centerT,
+                (terrainBaseY + segmentTopY) * 0.5,
+                start.z + dz * centerT
+            ),
+            size: new THREE.Vector3(
+                width,
+                segmentTopY - terrainBaseY,
+                segmentRun + 0.08
+            )
+        });
+        fill.rotation.y = yaw;
+        fill.name = `${name}_SOLID_FILL_${index + 1}`;
+        gameMap.refreshCollisionBox(fill);
+    }
+
+    return ramp;
 }
 
 function createGeometry(gameMap) {
@@ -107,14 +168,33 @@ function createGeometry(gameMap) {
     addFloor(gameMap, "SANDSTORM_LOW_SAFETY_FLOOR", 0, -4, 0, 120, 120);
 
     // Main combat levels.
-    addFloor(gameMap, "T_SPAWN_FLOOR", 0, 0, 49, 112, 18);
-    addFloor(gameMap, "LONG_APPROACH_FLOOR", -44, 0, 33, 12, 22);
+    addFloor(gameMap, "T_SPAWN_FLOOR", 0, 0, 51.5, 112, 13);
+    addFloor(gameMap, "T_MID_ENTRY_PAD", 0, 0, 44, 15, 2);
+    addFloor(gameMap, "T_TUNNEL_ENTRY_PAD", 21, 0, 45, 8, 2);
+    addFloor(gameMap, "LONG_APPROACH_FLOOR", -44, 0, 34, 12, 24);
     addFloor(gameMap, "MID_BASIN_FLOOR", 0, -2, 3, 15, 70);
-    addFloor(gameMap, "SHORT_MID_PLATFORM", -14, 1, -8, 9, 9);
-    addFloor(gameMap, "A_ELEVATED_PLATFORM", -34, 4, -29, 30, 28);
-    addFloor(gameMap, "CT_ELEVATED_SPAWN", 0, 1.5, -53, 48, 8);
-    addFloor(gameMap, "B_SITE_FLOOR", 35, 0, -20, 24, 40);
-    addFloor(gameMap, "B_TUNNEL_FLOOR", 32, -3, 23, 18, 20);
+    addFloor(gameMap, "SHORT_MID_PLATFORM", -14, 1, -10, 9, 4);
+    addFloor(gameMap, "A_ELEVATED_PLATFORM", -34, 4, -33, 30, 20);
+    addFloor(gameMap, "A_LONG_LANDING", -44, 4, -20.5, 11, 5);
+    addFloor(gameMap, "CT_ELEVATED_SPAWN", 0, 1.5, -54.5, 48, 5);
+    addFloor(gameMap, "CT_FRONT_PLATFORM", -10, 1.5, -50.5, 28, 3);
+    addFloor(gameMap, "CT_B_ENTRY_PAD", 15, 1.5, -51.5, 8, 1);
+    addFloor(gameMap, "B_SITE_FLOOR", 35, 0, -22, 24, 36);
+    addFloor(gameMap, "B_TUNNEL_FLOOR", 32, -3, 23.5, 18, 21);
+
+    // The low tunnel is a standalone enclosed passage, not space below a ramp.
+    const tunnelShell = [
+        [22.5, -0.75, 23, 1, 4.5, 28, "B_TUNNEL_LEFT_WALL"],
+        [41.5, -0.75, 23, 1, 4.5, 28, "B_TUNNEL_RIGHT_WALL"],
+        [32, 1.25, 23, 20, 0.5, 28, "B_TUNNEL_CEILING"]
+    ];
+    for (const [x, y, z, sx, sy, sz, name] of tunnelShell) {
+        const shell = gameMap.createWall({
+            position: new THREE.Vector3(x, y, z),
+            size: new THREE.Vector3(sx, sy, sz)
+        });
+        shell.name = name;
+    }
 
     // Required tactical ramps. All are real floor colliders and grenade targets.
     addRamp(gameMap, "LONG_RAMP", new THREE.Vector3(-44, 0, 22), new THREE.Vector3(-44, 4, -18), 11);
@@ -169,8 +249,8 @@ function addSiteMarker(gameMap, name, x, y, z) {
 }
 
 function createSpawnsAndZones(gameMap) {
-    gameMap.spawnPoints[TEAM.T] = [-8, -4, 0, 4, 8].map((x, index) => new THREE.Vector3(x, 0, index % 2 ? 45 : 49));
-    gameMap.spawnPoints[TEAM.CT] = [-8, -4, 0, 4, 8].map((x, index) => new THREE.Vector3(x, 1.5, index % 2 ? -51 : -54));
+    gameMap.spawnPoints[TEAM.T] = [-8, -4, 0, 4, 8].map(x => new THREE.Vector3(x, 0, 50));
+    gameMap.spawnPoints[TEAM.CT] = [-8, -4, 0, 4, 8].map(x => new THREE.Vector3(x, 1.5, -54));
     gameMap.buyZones[TEAM.T] = { minX: -14, maxX: 14, minZ: 41, maxZ: 56 };
     gameMap.buyZones[TEAM.CT] = { minX: -24, maxX: 24, minZ: -57, maxZ: -48 };
 }
