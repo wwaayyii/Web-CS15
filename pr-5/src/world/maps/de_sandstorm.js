@@ -146,7 +146,8 @@ function createGeometry(gameMap) {
     addFloor(gameMap, "SHORT_MID_PLATFORM", -14, 1, -10, 9, 4);
     addFloor(gameMap, "A_ELEVATED_PLATFORM", -34, 4, -33, 30, 20);
     addFloor(gameMap, "A_LONG_LANDING", -44, 4, -20.5, 11, 5);
-    addFloor(gameMap, "CT_ELEVATED_SPAWN", 0, 1.5, -54.5, 48, 5);
+    // Extend to the inner north boundary: no fallable seam behind CT spawn.
+    addFloor(gameMap, "CT_ELEVATED_SPAWN", 0, 1.5, -55, 48, 6);
     addFloor(gameMap, "CT_FRONT_PLATFORM", -10, 1.5, -50.5, 28, 3);
     addFloor(gameMap, "CT_B_ENTRY_PAD", 15, 1.5, -51.5, 8, 1);
     addFloor(gameMap, "B_SITE_FLOOR", 35, 0, -22, 24, 36);
@@ -176,11 +177,14 @@ function createGeometry(gameMap) {
     addRamp(gameMap, "CT_A_SUPPORT_RAMP", new THREE.Vector3(-20, 1.5, -51), new THREE.Vector3(-24, 4, -43), 7);
     addRamp(gameMap, "CT_B_SUPPORT_RAMP", new THREE.Vector3(15, 1.5, -51), new THREE.Vector3(29, 0, -39), 7);
     addRamp(gameMap, "CT_MID_RAMP", new THREE.Vector3(0, 1.5, -49), new THREE.Vector3(0, -2, -32), 7);
+    addRamp(gameMap, "LOWER_AREA_EXIT_RAMP", new THREE.Vector3(-15, -4, 30), new THREE.Vector3(0, -2, 30), 6);
+    addRamp(gameMap, "RIGHT_RETURN_RAMP", new THREE.Vector3(52, -4, 2), new THREE.Vector3(44, 0, -4), 6);
 
     const walls = [
         [0, -60, 120, 4], [0, 60, 120, 4], [-60, 0, 4, 120], [60, 0, 4, 120],
         [-31, 22, 3, 48], [-31, -43, 3, 18], [-51, 2, 3, 72], [-41, -38, 20, 3],
-        [-9, 25, 3, 34], [-9, -21, 3, 22], [9, 29, 3, 26], [9, -15, 3, 30],
+        // West canal wall leaves one broad lower-area recovery gate at z=24..34.
+        [-9, 16, 3, 16], [-9, 38, 3, 8], [-9, -21, 3, 22], [9, 29, 3, 26], [9, -15, 3, 30],
         [-40, -48, 20, 3], [-14, -48, 8, 3], [-18, -32, 3, 20],
         [16, -42, 16, 3], [39, -42, 14, 3], [48, -25, 3, 34], [30, -8, 18, 3],
         [22, 24, 3, 32], [43, 29, 3, 34]
@@ -244,7 +248,9 @@ function createNavigation(gameMap) {
         ["ct_spawn", 0, 1.5, -53, "CT Spawn"],
         ["ct_a_start", -20, 1.5, -51, "CT Support"], ["ct_a_mid", -22, 2.75, -47, "CT Support"], ["ct_a_end", -24, 4, -43, "CT Support"],
         ["ct_b_start", 15, 1.5, -51, "CT Support"], ["ct_b_mid", 22, 0.75, -45, "CT Support"], ["ct_b_end", 29, 0, -39, "CT Support"],
-        ["ct_mid_start", 0, 1.5, -49, "CT Mid"], ["ct_mid_mid", 0, -0.25, -40.5, "CT Mid"], ["ct_mid_end", 0, -2, -32, "CT Mid"]
+        ["ct_mid_start", 0, 1.5, -49, "CT Mid"], ["ct_mid_mid", 0, -0.25, -40.5, "CT Mid"], ["ct_mid_end", 0, -2, -32, "CT Mid"],
+        ["lower_area_exit_start", -15, -4, 30, "Lower Recovery"], ["lower_area_exit_mid", -7.5, -3, 30, "Lower Recovery"], ["lower_area_exit_end", 0, -2, 30, "Lower Recovery"],
+        ["right_lower_start", 52, -4, 2, "Right Recovery"], ["right_ramp_mid", 48, -2, -1, "Right Recovery"], ["right_upper_exit", 44, 0, -4, "Right Recovery"]
     ];
     for (const [id, x, y, z, area] of points) {
         graph.addNode(id, new THREE.Vector3(x, y, z), { area });
@@ -258,6 +264,9 @@ function createNavigation(gameMap) {
         ["ct_spawn", "ct_a_start", "ct_a_mid", "ct_a_end", "a_site"],
         ["ct_spawn", "ct_b_start", "ct_b_mid", "ct_b_end", "b_site"],
         ["ct_spawn", "ct_mid_start", "ct_mid_mid", "ct_mid_end", "mid_n"],
+        ["lower_area_exit_start", "lower_area_exit_mid", "lower_area_exit_end", "mid_descent_end", "mid"],
+        ["right_lower_start", "right_ramp_mid", "right_upper_exit", "b_site"],
+        ["right_upper_exit", "ct_b_end"],
         ["a_site", "short_a_end"], ["b_site", "ct_b_end"]
     ];
     for (const route of routes) {
