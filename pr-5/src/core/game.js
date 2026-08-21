@@ -217,6 +217,31 @@ export class Game {
             [];
 
 
+        this.botGroundSampleStates =
+            new WeakMap();
+
+        this.playerGroundOptions = {
+            grounded: {
+                maxStepUp: 0.6,
+                maxDrop: 0.85,
+                profileSource: "player"
+            },
+            airborne: {
+                maxStepUp: 0.65,
+                maxDrop: 0.3,
+                profileSource: "player"
+            }
+        };
+
+        this.playerGroundPosition =
+            new THREE.Vector3();
+
+        this.playerVerticalCollisionOptions = {
+            feetY: 0,
+            height: PLAYER_CONFIG.eyeHeight
+        };
+
+
         // ====================================================
         // Match Setup
         // ====================================================
@@ -4440,6 +4465,26 @@ export class Game {
     // Player Collision
     // ========================================================
 
+    setGroundQueryProfiling(
+        enabled
+    ) {
+
+        return map.setGroundQueryProfiling(
+            enabled
+        );
+    }
+
+
+    getGroundQueryProfile() {
+
+        return map.getGroundQueryProfile();
+    }
+
+
+    // Console usage (no per-frame logging):
+    // webCS15.setGroundQueryProfiling(true)
+    // webCS15.getGroundQueryProfile()
+
     resolvePlayerCollision() {
 
         if (
@@ -4455,19 +4500,28 @@ export class Game {
             this.player.getPosition();
 
 
-        const corrected =
-            map.resolvePositionCollision(
-                original,
-                PLAYER_CONFIG.radius,
-                {
-                    feetY:
-                        original.y -
-                        this.player.eyeHeight,
+        if (map.hasVerticalTerrain) {
 
-                    height:
-                        this.player.eyeHeight
-                }
-            );
+            this.playerVerticalCollisionOptions.feetY =
+                original.y -
+                this.player.eyeHeight;
+
+            this.playerVerticalCollisionOptions.height =
+                this.player.eyeHeight;
+        }
+
+
+        const corrected =
+            map.hasVerticalTerrain
+                ? map.resolvePositionCollision(
+                    original,
+                    PLAYER_CONFIG.radius,
+                    this.playerVerticalCollisionOptions
+                )
+                : map.resolvePositionCollision(
+                    original,
+                    PLAYER_CONFIG.radius
+                );
 
 
         corrected.y =
@@ -4479,8 +4533,14 @@ export class Game {
         );
 
 
+        if (!map.hasVerticalTerrain) {
+
+            return;
+        }
+
+
         const feetPosition =
-            new THREE.Vector3(
+            this.playerGroundPosition.set(
                 corrected.x,
                 corrected.y -
                     this.player.eyeHeight,
@@ -4491,17 +4551,9 @@ export class Game {
         const ground =
             map.getGroundContact(
                 feetPosition,
-                {
-                    maxStepUp:
-                        this.player.isGrounded
-                            ? 0.6
-                            : 0.65,
-
-                    maxDrop:
-                        this.player.isGrounded
-                            ? 0.85
-                            : 0.3
-                }
+                this.player.isGrounded
+                    ? this.playerGroundOptions.grounded
+                    : this.playerGroundOptions.airborne
             );
 
 
@@ -4538,7 +4590,9 @@ export class Game {
     // Bot Collision
     // ========================================================
 
-    resolveBotCollisions() {
+    resolveBotCollisions(
+        delta = 0
+    ) {
 
         for (
             const bot
@@ -4556,15 +4610,60 @@ export class Game {
                 bot.getPosition();
 
 
+            let state = null;
+
+
+            if (map.hasVerticalTerrain) {
+
+                state =
+                    this.botGroundSampleStates.get(
+                        bot
+                    );
+
+
+                if (!state) {
+
+                    state = {
+                        timer: 0,
+                        x: NaN,
+                        z: NaN,
+                        groundY: original.y,
+                        mapName: map.currentMap,
+                        collisionOptions: {
+                            feetY: original.y,
+                            height: 1.8
+                        },
+                        groundOptions: {
+                            maxStepUp: 0.65,
+                            maxDrop: 0.85,
+                            profileSource: `bot:${bot.id}`
+                        }
+                    };
+
+
+                    this.botGroundSampleStates.set(
+                        bot,
+                        state
+                    );
+                }
+
+
+                state.collisionOptions.feetY =
+                    original.y;
+            }
+
+
             const corrected =
-                map.resolvePositionCollision(
-                    original,
-                    bot.radius,
-                    {
-                        feetY: original.y,
-                        height: 1.8
-                    }
-                );
+                map.hasVerticalTerrain
+                    ? map.resolvePositionCollision(
+                        original,
+                        bot.radius,
+                        state.collisionOptions
+                    )
+                    : map.resolvePositionCollision(
+                        original,
+                        bot.radius
+                    );
 
 
             corrected.y =
@@ -4576,26 +4675,60 @@ export class Game {
             );
 
 
+            if (!map.hasVerticalTerrain) {
+                continue;
+            }
+
+
+            if (state.mapName !== map.currentMap) {
+
+                state.timer = 0;
+                state.x = NaN;
+                state.z = NaN;
+                state.groundY = corrected.y;
+                state.mapName = map.currentMap;
+            }
+
+
+            state.timer -= delta;
+
+
+            const moved =
+                !Number.isFinite(state.x) ||
+                Math.abs(corrected.x - state.x) > 0.025 ||
+                Math.abs(corrected.z - state.z) > 0.025;
+
+
+            if (
+                !moved ||
+                state.timer > 0
+            ) {
+
+                corrected.y = state.groundY;
+                bot.setPosition(corrected);
+                continue;
+            }
+
+
             const ground =
                 map.getGroundContact(
                     corrected,
-                    {
-                        maxStepUp: 0.65,
-                        maxDrop: 0.85
-                    }
+                    state.groundOptions
                 );
 
 
             if (ground) {
 
-                corrected.y =
+                state.groundY =
                     ground.point.y;
-
-
-                bot.setPosition(
-                    corrected
-                );
             }
+
+
+            state.x = corrected.x;
+            state.z = corrected.z;
+            state.timer = 0.05;
+            corrected.y = state.groundY;
+            bot.setPosition(corrected);
         }
     }
 
@@ -4738,7 +4871,9 @@ export class Game {
         }
 
 
-        this.resolveBotCollisions();
+        this.resolveBotCollisions(
+            delta
+        );
 
 
         this.resolveBotSeparation();
