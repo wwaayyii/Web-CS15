@@ -56,7 +56,7 @@ import {
 import {
     MAP_ID as DE_SANDSTORM_ID,
     buildDeSandstorm
-} from "./maps/de_sandstorm.js?v=20260821_2";
+} from "./maps/de_sandstorm.js?v=20260821_3";
 
 
 
@@ -331,6 +331,14 @@ export class GameMap {
     load(mapName) {
 
         this.clear();
+
+
+        /*
+         * Map capability flags are load-scoped. clear() already resets this;
+         * keep the invariant explicit here so no flat builder can inherit a
+         * previous vertical map's per-frame ground sampling state.
+         */
+        this.hasVerticalTerrain = false;
 
 
         const requestedMap =
