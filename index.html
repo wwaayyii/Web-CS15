@@ -245,6 +245,16 @@
                             AIM ARENA
                         </button>
 
+                        <button
+                            class="map-select-button"
+                            type="button"
+                            data-map-name="de_sandstorm"
+                            data-selected="false"
+                            aria-pressed="false"
+                        >
+                            DE SANDSTORM
+                        </button>
+
                     </div>
 
                     <div class="selected-map-text">
@@ -1091,7 +1101,8 @@
         const maps =
             new Set([
                 "fy_iceworld_web",
-                "aim_arena_web"
+                "aim_arena_web",
+                "de_sandstorm"
             ]);
 
 
@@ -1311,10 +1322,11 @@
                 if (mapLabel) {
 
                     mapLabel.textContent =
-                        selectedMap ===
-                            "aim_arena_web"
+                        selectedMap === "aim_arena_web"
                             ? "AIM ARENA"
-                            : "ICEWORLD";
+                            : selectedMap === "de_sandstorm"
+                                ? "DE SANDSTORM"
+                                : "ICEWORLD";
                 }
 
 

@@ -1099,13 +1099,12 @@ export class UISystem {
                 .selectedMapLabel
         ) {
 
-            this.elements
-                .selectedMapLabel
-                .textContent =
-                mapName ===
-                    "aim_arena_web"
+            this.elements.selectedMapLabel.textContent =
+                mapName === "aim_arena_web"
                     ? "AIM ARENA"
-                    : "ICEWORLD";
+                    : mapName === "de_sandstorm"
+                        ? "DE SANDSTORM"
+                        : "ICEWORLD";
         }
     }
 

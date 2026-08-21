@@ -53,6 +53,11 @@ import {
     buildAimArena
 } from "./maps/aim_arena.js?v=20260808_3";
 
+import {
+    MAP_ID as DE_SANDSTORM_ID,
+    buildDeSandstorm
+} from "./maps/de_sandstorm.js?v=20260821_8";
+
 
 
 
@@ -107,6 +112,11 @@ const MAP_BUILDERS =
         [
             AIM_ARENA_ID,
             buildAimArena
+        ],
+
+        [
+            DE_SANDSTORM_ID,
+            buildDeSandstorm
         ]
     ]);
 
@@ -158,6 +168,63 @@ export class GameMap {
         this.grenadeCollisionObjects = [];
 
         this.aiCollisionObjects = [];
+
+        /*
+         * Vertical Terrain V1:
+         * surfaces that may support player/BOT feet. Keeping this separate
+         * from horizontal blockers lets rotated ramps use raycast contacts
+         * without their world AABB becoming an invisible wall.
+         */
+        this.walkableSurfaces = [];
+
+        this.rampZones = [];
+
+        this.rampGroundContactResult = {
+            point: new THREE.Vector3(),
+            normal: new THREE.Vector3(0, 1, 0),
+            object: null,
+            rampZone: null,
+            groundY: 0
+        };
+
+        /* Flat maps opt out of every per-frame ground raycast. */
+        this.hasVerticalTerrain = false;
+
+        this.groundRaycaster =
+            new THREE.Raycaster();
+
+        this.groundRayOrigin =
+            new THREE.Vector3();
+
+        this.groundRayDirection =
+            new THREE.Vector3(0, -1, 0);
+
+        this.groundNormal =
+            new THREE.Vector3();
+
+        this.groundSurfaceLocalPoint =
+            new THREE.Vector3();
+
+        this.groundContactResult = {
+            point: new THREE.Vector3(),
+            normal: new THREE.Vector3(0, 1, 0),
+            object: null,
+            slopeDegrees: 0
+        };
+
+        this.groundIntersections = [];
+
+        this.groundSlopeNormalCache =
+            new Map();
+
+        this.groundQueryProfile = {
+            total: 0,
+            snapshotTotal: 0,
+            snapshotTime: performance.now(),
+            enabled: false,
+            sources: new Map(),
+            snapshotSources: new Map()
+        };
 
 
         // ====================================================
@@ -277,6 +344,14 @@ export class GameMap {
     load(mapName) {
 
         this.clear();
+
+
+        /*
+         * Map capability flags are load-scoped. clear() already resets this;
+         * keep the invariant explicit here so no flat builder can inherit a
+         * previous vertical map's per-frame ground sampling state.
+         */
+        this.hasVerticalTerrain = false;
 
 
         const requestedMap =
@@ -720,6 +795,8 @@ export class GameMap {
             weaponTarget = true,
             grenadeCollision = true,
             aiCollision = true,
+            walkableSurface =
+                type === MAP_OBJECT_TYPE.FLOOR,
 
             /*
              * 未显式指定时，根据 map object type 自动推断。
@@ -861,6 +938,22 @@ export class GameMap {
         if (aiCollision) {
 
             this.aiCollisionObjects.push(
+                object
+            );
+        }
+
+
+        if (walkableSurface) {
+
+            object.userData.walkableSurface =
+                true;
+
+
+            object.geometry
+                ?.computeBoundingBox?.();
+
+
+            this.walkableSurfaces.push(
                 object
             );
         }
@@ -2428,11 +2521,30 @@ export class GameMap {
 
     resolvePositionCollision(
         position,
-        radius = 0.45
+        radius = 0.45,
+        {
+            feetY = null,
+            height = null
+        } = {}
     ) {
 
         const result =
             position.clone();
+
+
+        if (
+            this.hasVerticalTerrain &&
+            Number.isFinite(feetY) &&
+            Number.isFinite(height)
+        ) {
+
+            this.resolveRampZoneUndersideCollision(
+                result,
+                feetY,
+                height,
+                radius
+            );
+        }
 
 
         // ----------------------------------------------------
@@ -2479,7 +2591,8 @@ export class GameMap {
              */
             if (
                 object.userData.mapType ===
-                MAP_OBJECT_TYPE.FLOOR
+                    MAP_OBJECT_TYPE.FLOOR &&
+                !object.userData.solidTerrain
             ) {
                 continue;
             }
@@ -2517,6 +2630,24 @@ export class GameMap {
                     object,
                     box
                 );
+            }
+
+
+            /*
+             * Old callers omit vertical bounds and retain the original flat
+             * XZ behaviour. Entity callers provide a feet/body interval so a
+             * bridge or tunnel ceiling on another level does not block them.
+             */
+            if (
+                Number.isFinite(feetY) &&
+                Number.isFinite(height) &&
+                (
+                    feetY + height <= box.min.y + 0.01 ||
+                    feetY >= box.max.y - 0.01
+                )
+            ) {
+
+                continue;
             }
 
 
@@ -2623,6 +2754,574 @@ export class GameMap {
 
 
         return result;
+    }
+
+
+    // ========================================================
+    // Vertical Terrain V1 - Ground Contact
+    // ========================================================
+
+    getGroundContact(
+        position,
+        {
+            maxStepUp = 0.6,
+            maxDrop = 1.25,
+            maxSlopeDegrees = 48,
+            profileSource = null
+        } = {}
+    ) {
+
+        if (
+            !this.hasVerticalTerrain ||
+            !position ||
+            this.walkableSurfaces.length === 0
+        ) {
+
+            return null;
+        }
+
+
+        this.groundRayOrigin.set(
+            position.x,
+            position.y + maxStepUp + 0.05,
+            position.z
+        );
+
+
+        this.groundRaycaster.set(
+            this.groundRayOrigin,
+            this.groundRayDirection
+        );
+
+
+        this.groundRaycaster.near = 0;
+        this.groundRaycaster.far =
+            maxStepUp + maxDrop + 0.1;
+
+
+        return this._intersectWalkableGround(
+            maxSlopeDegrees,
+            profileSource
+        );
+    }
+
+
+    registerRampZone({
+        name,
+        start,
+        end,
+        width,
+        baseY = -4,
+        surfaceObject = null
+    }) {
+
+        if (
+            !name ||
+            !start ||
+            !end ||
+            !Number.isFinite(width)
+        ) {
+
+            return null;
+        }
+
+
+        const dx = end.x - start.x;
+        const dz = end.z - start.z;
+        const length = Math.hypot(dx, dz);
+
+
+        if (length <= 0.001) {
+            return null;
+        }
+
+
+        const rise = end.y - start.y;
+        const slopeLength = Math.hypot(length, rise);
+        const zone = {
+            name,
+            start: start.clone(),
+            end: end.clone(),
+            width,
+            baseY,
+            halfWidth: width * 0.5,
+            length,
+            rise,
+            dirX: dx / length,
+            dirZ: dz / length,
+            sideX: dz / length,
+            sideZ: -dx / length,
+            normal: new THREE.Vector3(
+                -rise / slopeLength * dx / length,
+                length / slopeLength,
+                -rise / slopeLength * dz / length
+            ),
+            surfaceObject
+        };
+
+
+        this.rampZones.push(zone);
+        return zone;
+    }
+
+
+    getRampGroundContact(
+        position,
+        options = null
+    ) {
+
+        if (
+            !this.hasVerticalTerrain ||
+            !position
+        ) {
+
+            return null;
+        }
+
+
+        const alongMargin =
+            options?.alongMargin ?? 0.15;
+        const sideMargin =
+            options?.sideMargin ?? 0.15;
+        const maxVerticalDistance =
+            options?.maxVerticalDistance ?? 0.7;
+
+
+        for (const zone of this.rampZones) {
+            const relativeX = position.x - zone.start.x;
+            const relativeZ = position.z - zone.start.z;
+            const along = relativeX * zone.dirX + relativeZ * zone.dirZ;
+
+
+            if (
+                along < -alongMargin ||
+                along > zone.length + alongMargin
+            ) {
+                continue;
+            }
+
+
+            const sideDistance =
+                relativeX * zone.sideX +
+                relativeZ * zone.sideZ;
+
+
+            if (
+                Math.abs(sideDistance) >
+                zone.halfWidth + sideMargin
+            ) {
+                continue;
+            }
+
+
+            const t = THREE.MathUtils.clamp(
+                along / zone.length,
+                0,
+                1
+            );
+            const groundY = zone.start.y + zone.rise * t;
+
+
+            if (
+                Math.abs(position.y - groundY) >
+                maxVerticalDistance
+            ) {
+                continue;
+            }
+
+
+            const result = this.rampGroundContactResult;
+            result.point.set(position.x, groundY, position.z);
+            result.normal.copy(zone.normal);
+            result.object = zone.surfaceObject;
+            result.rampZone = zone;
+            result.groundY = groundY;
+            return result;
+        }
+
+
+        return null;
+    }
+
+
+    resolveRampZoneUndersideCollision(
+        position,
+        feetY,
+        height,
+        radius
+    ) {
+
+        for (const zone of this.rampZones) {
+            const relativeX = position.x - zone.start.x;
+            const relativeZ = position.z - zone.start.z;
+            const along = relativeX * zone.dirX + relativeZ * zone.dirZ;
+
+
+            if (
+                along < 0 ||
+                along > zone.length + radius
+            ) {
+                continue;
+            }
+
+
+            const sideDistance =
+                relativeX * zone.sideX +
+                relativeZ * zone.sideZ;
+            const sideLimit = zone.halfWidth + radius;
+
+
+            if (Math.abs(sideDistance) >= sideLimit) {
+                continue;
+            }
+
+
+            const t = THREE.MathUtils.clamp(
+                along / zone.length,
+                0,
+                1
+            );
+            const groundY = zone.start.y + zone.rise * t;
+
+
+            if (
+                feetY >= groundY - 0.7 ||
+                feetY + height <= zone.baseY
+            ) {
+                continue;
+            }
+
+
+            const sideSign = sideDistance < 0 ? -1 : 1;
+            const push = sideLimit - Math.abs(sideDistance) + 0.01;
+            position.x += zone.sideX * sideSign * push;
+            position.z += zone.sideZ * sideSign * push;
+        }
+
+
+        return position;
+    }
+
+
+    getGroundContactAlongVerticalSegment(
+        position,
+        previousFeetY,
+        predictedFeetY,
+        {
+            safetyMargin = 0.08,
+            maxSlopeDegrees = 48,
+            profileSource = null
+        } = {}
+    ) {
+
+        if (
+            !this.hasVerticalTerrain ||
+            !position ||
+            !Number.isFinite(previousFeetY) ||
+            !Number.isFinite(predictedFeetY) ||
+            predictedFeetY > previousFeetY ||
+            this.walkableSurfaces.length === 0
+        ) {
+
+            return null;
+        }
+
+
+        this.groundRayOrigin.set(
+            position.x,
+            previousFeetY + safetyMargin,
+            position.z
+        );
+
+
+        this.groundRaycaster.set(
+            this.groundRayOrigin,
+            this.groundRayDirection
+        );
+
+
+        this.groundRaycaster.near = 0;
+        this.groundRaycaster.far =
+            previousFeetY -
+            predictedFeetY +
+            safetyMargin * 2;
+
+
+        const ground =
+            this._intersectWalkableGround(
+                maxSlopeDegrees,
+                profileSource
+            );
+
+
+        if (
+            !ground ||
+            predictedFeetY > ground.point.y + safetyMargin ||
+            previousFeetY < ground.point.y - safetyMargin
+        ) {
+
+            return null;
+        }
+
+
+        return ground;
+    }
+
+
+    _intersectWalkableGround(
+        maxSlopeDegrees,
+        profileSource
+    ) {
+
+        this.groundQueryProfile.total++;
+
+
+        if (
+            this.groundQueryProfile.enabled &&
+            profileSource
+        ) {
+
+            this.groundQueryProfile.sources.set(
+                profileSource,
+                (
+                    this.groundQueryProfile.sources.get(
+                        profileSource
+                    ) || 0
+                ) + 1
+            );
+        }
+
+
+        this.groundIntersections.length = 0;
+
+
+        const hits =
+            this.groundRaycaster.intersectObjects(
+                this.walkableSurfaces,
+                false,
+                this.groundIntersections
+            );
+
+
+        let minimumNormalY =
+            this.groundSlopeNormalCache.get(
+                maxSlopeDegrees
+            );
+
+
+        if (minimumNormalY === undefined) {
+
+            minimumNormalY =
+                Math.cos(
+                    THREE.MathUtils.degToRad(
+                        maxSlopeDegrees
+                    )
+                );
+
+
+            this.groundSlopeNormalCache.set(
+                maxSlopeDegrees,
+                minimumNormalY
+            );
+        }
+
+
+        for (const hit of hits) {
+
+            const normal =
+                this.groundNormal;
+
+
+            if (hit.face?.normal) {
+
+                normal.copy(
+                    hit.face.normal
+                );
+
+            } else {
+
+                normal.set(0, 1, 0);
+            }
+
+
+            normal.transformDirection(
+                hit.object.matrixWorld
+            );
+
+
+            /* Reject platform undersides, walls, and box side faces. */
+            if (normal.y <= minimumNormalY) {
+                continue;
+            }
+
+
+            const result =
+                this.groundContactResult;
+
+
+            result.point.copy(
+                hit.point
+            );
+
+            result.normal.copy(
+                normal
+            );
+
+            result.object =
+                hit.object;
+
+            result.slopeDegrees =
+                THREE.MathUtils.radToDeg(
+                    Math.acos(
+                        THREE.MathUtils.clamp(
+                            normal.y,
+                            -1,
+                            1
+                        )
+                    )
+                );
+
+
+            return result;
+        }
+
+
+        return null;
+    }
+
+
+    isPositionOverWalkableSurface(
+        position,
+        object,
+        margin = 0.08
+    ) {
+
+        const box =
+            object?.geometry?.boundingBox;
+
+
+        if (
+            !position ||
+            !object ||
+            !box
+        ) {
+
+            return false;
+        }
+
+
+        this.groundSurfaceLocalPoint.copy(
+            position
+        );
+
+
+        object.worldToLocal(
+            this.groundSurfaceLocalPoint
+        );
+
+
+        return (
+            this.groundSurfaceLocalPoint.x >= box.min.x - margin &&
+            this.groundSurfaceLocalPoint.x <= box.max.x + margin &&
+            this.groundSurfaceLocalPoint.z >= box.min.z - margin &&
+            this.groundSurfaceLocalPoint.z <= box.max.z + margin
+        );
+    }
+
+
+    getGroundQueryProfile() {
+
+        const now =
+            performance.now();
+
+
+        const elapsedSeconds =
+            Math.max(
+                0.001,
+                (now - this.groundQueryProfile.snapshotTime) /
+                    1000
+            );
+
+
+        const queryDelta =
+            this.groundQueryProfile.total -
+            this.groundQueryProfile.snapshotTotal;
+
+
+        const sources = {};
+
+
+        for (
+            const [source, count]
+            of this.groundQueryProfile.sources
+        ) {
+
+            const previous =
+                this.groundQueryProfile.snapshotSources.get(
+                    source
+                ) || 0;
+
+
+            sources[source] =
+                (count - previous) /
+                elapsedSeconds;
+
+
+            this.groundQueryProfile.snapshotSources.set(
+                source,
+                count
+            );
+        }
+
+
+        const snapshot = {
+            hasVerticalTerrain:
+                this.hasVerticalTerrain,
+
+            enabled:
+                this.groundQueryProfile.enabled,
+
+            total:
+                this.groundQueryProfile.total,
+
+            queriesPerSecond:
+                queryDelta /
+                elapsedSeconds,
+
+            queriesPerSecondBySource:
+                sources,
+
+            elapsedSeconds
+        };
+
+
+        this.groundQueryProfile.snapshotTotal =
+            this.groundQueryProfile.total;
+
+        this.groundQueryProfile.snapshotTime =
+            now;
+
+
+        return snapshot;
+    }
+
+
+    setGroundQueryProfiling(
+        enabled
+    ) {
+
+        this.groundQueryProfile.enabled =
+            Boolean(enabled);
+
+        this.groundQueryProfile.total = 0;
+        this.groundQueryProfile.snapshotTotal = 0;
+        this.groundQueryProfile.sources.clear();
+        this.groundQueryProfile.snapshotSources.clear();
+        this.groundQueryProfile.snapshotTime =
+            performance.now();
+
+
+        return this.groundQueryProfile.enabled;
     }
 
 
@@ -2931,6 +3630,22 @@ export class GameMap {
 
         this.aiCollisionObjects.length =
             0;
+
+        this.walkableSurfaces.length =
+            0;
+
+        this.rampZones.length = 0;
+
+        this.hasVerticalTerrain = false;
+
+        this.groundSlopeNormalCache.clear();
+
+        this.groundQueryProfile.total = 0;
+        this.groundQueryProfile.snapshotTotal = 0;
+        this.groundQueryProfile.sources.clear();
+        this.groundQueryProfile.snapshotSources.clear();
+        this.groundQueryProfile.snapshotTime =
+            performance.now();
 
 
         this.navigationRejectedWaypoints =
