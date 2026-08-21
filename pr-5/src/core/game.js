@@ -4548,7 +4548,14 @@ export class Game {
             );
 
 
+        const rampGround =
+            map.getRampGroundContact(
+                feetPosition
+            );
+
+
         const ground =
+            rampGround ||
             map.getGroundContact(
                 feetPosition,
                 this.player.isGrounded
@@ -4731,6 +4738,24 @@ export class Game {
 
 
             if (state.grounded) {
+
+                const rampGround =
+                    map.getRampGroundContact(
+                        corrected
+                    );
+
+
+                if (rampGround) {
+
+                    state.groundY = rampGround.groundY;
+                    state.groundObject = rampGround.object;
+                    state.x = corrected.x;
+                    state.z = corrected.z;
+                    state.timer = 0.05;
+                    corrected.y = rampGround.groundY;
+                    bot.setPosition(corrected);
+                    continue;
+                }
 
                 const leftCachedSurface =
                     state.groundObject &&
