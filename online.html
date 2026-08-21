@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WEB CS 1.5 · Online</title>
+<link rel="stylesheet" href="./style.css">
+<style>
+body{margin:0;background:#081018;color:#d8e1e8;font-family:Arial,Helvetica,sans-serif}.online-shell{width:min(980px,92vw);margin:6vh auto;padding:26px;background:rgba(8,17,25,.96);border:1px solid #40515e;box-shadow:0 16px 60px #000}.online-head{display:flex;justify-content:space-between;align-items:end;border-bottom:1px solid #34434f;padding-bottom:16px}.online-logo{font-size:30px;font-weight:900;letter-spacing:3px;color:#fff}.online-logo span{color:#3ec6ff}.online-sub{font-size:11px;letter-spacing:2px;color:#8295a4}.online-status{margin:16px 0;padding:9px 12px;background:#102331;border-left:3px solid #3ec6ff;font:12px Consolas,monospace}.online-status.bad{border-color:#ff6658;color:#ff9187}.browser-toolbar{display:flex;gap:10px;align-items:center;margin:16px 0}.browser-toolbar input{flex:1}.browser-toolbar input,.create-grid input,.create-grid select{padding:10px;background:#0d1720;border:1px solid #40515e;color:#fff}.online-btn{padding:10px 16px;border:1px solid #4e6575;background:#172733;color:#dce8ef;font-weight:800;cursor:pointer}.online-btn:hover{border-color:#3ec6ff;color:#fff}.online-btn.primary{background:#11537d;border-color:#3ec6ff}.room-header,.room-row{display:grid;grid-template-columns:2fr 1.2fr .7fr .8fr .7fr;gap:8px;align-items:center}.room-header{padding:10px;background:#14222c;color:#8fa3b1;font-size:11px;font-weight:800}.room-row{padding:12px 10px;border-bottom:1px solid #263641}.room-row small{display:block;color:#6f818d;margin-top:3px}.room-row button{padding:7px;background:#153f58;border:1px solid #3e8db6;color:#fff;cursor:pointer}.room-row button:disabled{opacity:.35;cursor:not-allowed}.empty-room{padding:38px;text-align:center;color:#71838f;border:1px dashed #344955}.lobby-card{padding:22px;border:1px solid #3d5362;background:#0c1720}.lobby-meta{display:flex;gap:24px;color:#8fa3b1;font-size:12px;margin-bottom:18px}.lobby-player{padding:12px;border-bottom:1px solid #293b47;font-family:Consolas,monospace}.lobby-actions{margin-top:20px}.back-link{color:#9eb4c3;text-decoration:none}.create-grid{display:grid;gap:12px;min-width:min(460px,80vw)}dialog{background:#0b151d;color:#fff;border:1px solid #4d6372;padding:24px}dialog::backdrop{background:rgba(0,0,0,.72)}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px}@media(max-width:700px){.room-header,.room-row{grid-template-columns:1.7fr 1fr .7fr}.room-header div:nth-child(4),.room-row div:nth-child(4){display:none}.online-head{align-items:start;flex-direction:column;gap:10px}}
+</style>
+</head>
+<body>
+<main class="online-shell">
+<header class="online-head"><div><div class="online-logo">WEB CS <span>1.5</span></div><div class="online-sub">ONLINE MULTIPLAYER · PHASE 1</div></div><a class="back-link" href="./index.html">← MAIN MENU</a></header>
+<div id="online-status" class="online-status">CONNECTING TO ONLINE SERVER...</div>
+<section id="browser-panel">
+<div class="browser-toolbar"><input id="player-name" maxlength="20" placeholder="PLAYER NAME"><span id="ping-text">PING -- ms</span><button id="refresh-button" class="online-btn">REFRESH</button><button id="create-button" class="online-btn primary">CREATE ROOM</button></div>
+<div class="room-header"><div>ROOM</div><div>MAP</div><div>PLAYERS</div><div>STATUS</div><div>ACTION</div></div>
+<div id="room-list"></div>
+</section>
+<section id="lobby-panel" hidden><div class="lobby-card"><h2 id="lobby-title">ROOM</h2><div class="lobby-meta"><span>MAP: <b id="lobby-map"></b></span><span>ROOM ID: <b id="lobby-id"></b></span><span>MAX: 2 PLAYERS</span></div><h3>PLAYERS</h3><div id="lobby-players"></div><div class="lobby-actions"><button id="leave-room" class="online-btn">LEAVE ROOM</button></div></div></section>
+</main>
+<dialog id="create-dialog"><form id="create-form" class="create-grid"><h2>CREATE ROOM</h2><label>ROOM NAME</label><input id="room-name" maxlength="28" value="WEB-CS Room"><label>MAP</label><select id="room-map"><option value="fy_iceworld_web">ICEWORLD</option><option value="aim_arena_web">AIM ARENA</option></select><label>MAX PLAYERS</label><input value="2 PLAYERS · V1 LOCKED" disabled><div class="dialog-actions"><button id="create-cancel" class="online-btn" type="button">CANCEL</button><button class="online-btn primary" type="submit">CREATE</button></div></form></dialog>
+<script type="module" src="./src/network/onlineLobby.js"></script>
+</body>
+</html>
